@@ -17,6 +17,7 @@ export type VoxelBlock = {
   y: number;
   z: number;
   id: BlockId;
+  ownerId?: string;
 };
 
 export type VoxelStructure = {
@@ -47,6 +48,7 @@ export type EditTransaction = {
   id: string;
   prompt: string;
   operations: BuildingOperation[];
+  toolCalls?: VoxelToolCall[];
   patch: StructurePatch;
   before: VoxelStructure;
   after: VoxelStructure;
@@ -56,12 +58,103 @@ export type EditTransaction = {
 export type PendingEdit = {
   prompt: string;
   operations: BuildingOperation[];
+  toolCalls?: VoxelToolCall[];
   patch: StructurePatch;
   preview: VoxelStructure;
 };
 
+export type Box2D = {
+  minX: number;
+  minZ: number;
+  maxX: number;
+  maxZ: number;
+};
+
+export type Box3D = Box2D & {
+  minY: number;
+  maxY: number;
+};
+
+export type SceneBounds = {
+  width: 64;
+  depth: 64;
+  maxHeight: number;
+};
+
+export type SemanticRegion = {
+  id: string;
+  bounds: Box3D;
+  locked?: boolean;
+};
+
+export type ThemeSpec = {
+  name: string;
+  palette: BlockId[];
+};
+
+export type RoadSpec = {
+  id: string;
+  bounds: Box2D;
+  width: number;
+  material: BlockId;
+};
+
+export type PlannedBuildingSpec = {
+  width: number;
+  depth: number;
+  height: number;
+  roof: "flat" | "gable";
+  wallMaterial: BlockId;
+  roofMaterial: BlockId;
+};
+
+export type LotSpec = {
+  id: string;
+  bounds: Box2D;
+  purpose: "residential" | "commercial" | "industrial" | "utility";
+  building: PlannedBuildingSpec;
+  locked?: boolean;
+};
+
+export type LandmarkSpec = {
+  id: string;
+  bounds: Box2D;
+  kind: string;
+};
+
+export type ConnectionSpec = {
+  id: string;
+  fromRegionId: string;
+  toRegionId: string;
+  kind: "road" | "bridge" | "pipe";
+};
+
+export type WorldPlan = {
+  id: string;
+  name: string;
+  theme: ThemeSpec;
+  bounds: SceneBounds;
+  roads: RoadSpec[];
+  lots: LotSpec[];
+  landmarks: LandmarkSpec[];
+  connections: ConnectionSpec[];
+  regions: SemanticRegion[];
+};
+
+export type ToolWriteMode = "overwrite" | "empty";
+
+export type VoxelToolCall =
+  | { type: "fill"; from: Position; to: Position; material: BlockId; ownerId?: string; mode?: ToolWriteMode }
+  | { type: "remove"; from: Position; to: Position }
+  | { type: "replace"; from: Position; to: Position; fromMaterial: BlockId; toMaterial: BlockId; ownerId?: string }
+  | { type: "line"; from: Position; to: Position; material: BlockId; ownerId?: string; mode?: ToolWriteMode }
+  | { type: "copy"; source: Box3D; offset: Position; ownerId?: string; mode?: ToolWriteMode }
+  | { type: "mirror"; source: Box3D; axis: "x" | "z"; pivot: number; ownerId?: string; mode?: ToolWriteMode };
+
 export type BuildingDocument = {
   structure: VoxelStructure;
+  worldPlan?: WorldPlan;
+  semanticRegions: SemanticRegion[];
   history: EditTransaction[];
   future: EditTransaction[];
   pendingEdit: PendingEdit | null;

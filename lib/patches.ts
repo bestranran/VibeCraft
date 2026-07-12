@@ -20,14 +20,18 @@ export function normalizeStructure(structure: VoxelStructure): VoxelStructure {
 export function diffStructures(before: VoxelStructure, after: VoxelStructure): StructurePatch {
   const beforeMap = new Map(before.blocks.map((block) => [coordinateKey(block), block]));
   const afterMap = new Map(after.blocks.map((block) => [coordinateKey(block), block]));
-  const keys = new Set([...beforeMap.keys(), ...afterMap.keys()]);
+  const keys = Array.from(new Set([...beforeMap.keys(), ...afterMap.keys()])).sort((a, b) => {
+    const [ax, ay, az] = a.split(",").map(Number);
+    const [bx, by, bz] = b.split(",").map(Number);
+    return ay - by || az - bz || ax - bx;
+  });
   const changes: StructurePatch["changes"] = [];
   for (const key of keys) {
     const oldBlock = beforeMap.get(key);
     const newBlock = afterMap.get(key);
     if (!oldBlock && newBlock) changes.push({ type: "add", block: { ...newBlock } });
     else if (oldBlock && !newBlock) changes.push({ type: "remove", block: { ...oldBlock } });
-    else if (oldBlock && newBlock && oldBlock.id !== newBlock.id) {
+    else if (oldBlock && newBlock && (oldBlock.id !== newBlock.id || oldBlock.ownerId !== newBlock.ownerId)) {
       changes.push({ type: "replace", before: { ...oldBlock }, after: { ...newBlock } });
     }
   }

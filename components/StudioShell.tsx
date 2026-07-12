@@ -71,7 +71,7 @@ export function StudioShell() {
   }
 
   function handleClear() {
-    setDocument({ structure: { name: "empty-scene", size: [0, 0, 0], blocks: [] }, history: [], future: [], pendingEdit: null });
+    setDocument(createBuildingDocument({ name: "empty-scene", size: [0, 0, 0], blocks: [] }));
     setEditPrompt("");
     setEditError(null);
   }

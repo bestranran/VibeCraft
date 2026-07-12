@@ -70,6 +70,7 @@ lib/deepseek-building-planner.ts
 lib/operation-validation.ts
 lib/local-edit-parser.ts
 lib/patches.ts
+lib/voxel-tools.ts
 lib/structure-analysis.ts
 ```
 
