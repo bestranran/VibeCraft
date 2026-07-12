@@ -1,6 +1,6 @@
 # VibeCraft Studio
 
-See [PRODUCT_RULES.md](./PRODUCT_RULES.md) for the product positioning, architectural boundaries, and contribution principles.
+See [PRODUCT_RULES.md](./PRODUCT_RULES.md) for the product positioning and architectural boundaries, and [PLAN.md](./PLAN.md) for the phased execution plan.
 
 VibeCraft Studio is an open source MVP for a browser-based Minecraft-style 3D voxel building editor. Type a building prompt, generate a small mock structure, inspect it in 3D, then export the build as a `.mcfunction` file full of `setblock` commands.
 
