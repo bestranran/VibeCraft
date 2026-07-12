@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": ".test-build",
+    "rootDir": ".",
+    "noEmit": false,
+    "incremental": false
+  },
+  "include": ["lib/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules"]
+}
