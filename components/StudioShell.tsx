@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Check, Download, Eraser, KeyRound, Redo2, Undo2, X } from "lucide-react";
 import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { InspectorPanel } from "@/components/InspectorPanel";
@@ -9,16 +9,14 @@ import { VoxelCanvas } from "@/components/VoxelCanvas";
 import { WorldPlanPreview } from "@/components/WorldPlanPreview";
 import { exportMcFunction, toMcFunctionFilename, toSchematicFilename } from "@/lib/exporters";
 import { EXAMPLE_PROMPTS } from "@/lib/structure";
-import type { GenerationMetadata, VoxelStructure, WorldPlan, WorldPlanMetadata } from "@/lib/structure";
+import type { BuildingOperation, GenerationMetadata, StructurePatch, VoxelStructure, VoxelToolCall, WorldPlan, WorldPlanMetadata } from "@/lib/structure";
 import type { BuildingDocument } from "@/lib/structure";
-import { generateStructure } from "@/lib/generator";
-import { applyBuildingOperations } from "@/lib/building-operations";
-import { summarizeStructure } from "@/lib/structure-analysis";
+import { generateStructure, placeStructureInScene } from "@/lib/generator";
 import { acceptPendingEdit, createBuildingDocument, redoDocument, rejectPendingEdit, setPendingEdit, setWorldPlan, undoDocument } from "@/lib/building-document";
 
 export function StudioShell() {
   const [prompt, setPrompt] = useState(EXAMPLE_PROMPTS[0]);
-  const [document, setDocument] = useState<BuildingDocument>(() => createBuildingDocument(generateStructure(EXAMPLE_PROMPTS[0])));
+  const [document, setDocument] = useState<BuildingDocument>(() => createBuildingDocument(placeStructureInScene(generateStructure(EXAMPLE_PROMPTS[0]))));
   const [editPrompt, setEditPrompt] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -33,6 +31,7 @@ export function StudioShell() {
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planPreviewOpen, setPlanPreviewOpen] = useState(false);
+  const editRequestId = useRef(0);
   const structure = document.structure;
 
   const hasBlocks = structure.blocks.length > 0;
@@ -78,6 +77,8 @@ export function StudioShell() {
   async function handleGenerate(nextPrompt = prompt) {
     const command = nextPrompt.trim();
     if (!command || generateLoading) return;
+    editRequestId.current += 1;
+    setEditLoading(false);
     setPrompt(command);
     setGenerateLoading(true);
     setGenerateError(null);
@@ -112,6 +113,8 @@ export function StudioShell() {
   }
 
   function handleClear() {
+    editRequestId.current += 1;
+    setEditLoading(false);
     setDocument(createBuildingDocument({ name: "empty-scene", size: [0, 0, 0], blocks: [] }));
     setEditPrompt("");
     setEditError(null);
@@ -119,20 +122,50 @@ export function StudioShell() {
 
   async function handlePreviewEdit() {
     if (!editPrompt.trim() || document.pendingEdit) return;
+    const requestId = editRequestId.current + 1;
+    editRequestId.current = requestId;
     try {
       setEditLoading(true);
       setEditError(null);
-      const response = await fetch("/api/edit", { method: "POST", headers: { "Content-Type": "application/json", ...(deepSeekKey ? { "X-DeepSeek-API-Key": deepSeekKey } : {}) }, body: JSON.stringify({ command: editPrompt, structureSummary: summarizeStructure(structure), availableOperations: ["resizeRoof", "addWindows", "addChimney", "addPath", "changePalette", "addFloor", "removeFeature"], structure }) });
-      const payload = await response.json() as { operations?: import("@/lib/structure").BuildingOperation[]; provider?: string; fallback?: boolean; error?: string };
-      if (!response.ok || !payload.operations) throw new Error(payload.error || "The planner returned no operations.");
-      setPlannerLabel(payload.provider === "deepseek" ? "DeepSeek AI" : payload.fallback ? "Local fallback" : "Local planner");
-      const operations = payload.operations;
-      const result = applyBuildingOperations(structure, operations);
-      setDocument((current) => setPendingEdit(current, { prompt: editPrompt.trim(), operations, patch: result.patch, preview: result.structure }));
+      const response = await fetch("/api/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(deepSeekKey ? { "X-DeepSeek-API-Key": deepSeekKey } : {}) },
+        body: JSON.stringify({
+          command: editPrompt,
+          structure,
+          generationMetadata: document.generationMetadata,
+          semanticRegions: document.semanticRegions
+        })
+      });
+      const payload = await response.json() as {
+        operations?: BuildingOperation[];
+        toolCalls?: VoxelToolCall[];
+        patch?: StructurePatch;
+        preview?: VoxelStructure;
+        provider?: string;
+        fallback?: boolean;
+        limitedFallback?: boolean;
+        repaired?: boolean;
+        error?: string;
+      };
+      if (!response.ok || !payload.patch || !payload.preview || (!payload.toolCalls && !payload.operations)) {
+        throw new Error(payload.error || "The planner returned no edit preview.");
+      }
+      if (editRequestId.current !== requestId) return;
+      setPlannerLabel(payload.provider === "deepseek-voxel-edit"
+        ? `DeepSeek voxel editor${payload.repaired ? " · repaired" : ""}`
+        : payload.limitedFallback ? "Limited local fallback" : "Local planner");
+      setDocument((current) => setPendingEdit(current, {
+        prompt: editPrompt.trim(),
+        operations: payload.operations ?? [],
+        ...(payload.toolCalls ? { toolCalls: payload.toolCalls } : {}),
+        patch: payload.patch!,
+        preview: payload.preview!
+      }));
     } catch (error) {
-      setEditError(error instanceof Error ? error.message : "This edit could not be previewed.");
+      if (editRequestId.current === requestId) setEditError(error instanceof Error ? error.message : "This edit could not be previewed.");
     } finally {
-      setEditLoading(false);
+      if (editRequestId.current === requestId) setEditLoading(false);
     }
   }
 
@@ -148,10 +181,14 @@ export function StudioShell() {
   }
 
   function handleUndo() {
+    editRequestId.current += 1;
+    setEditLoading(false);
     setDocument((current) => undoDocument(current));
   }
 
   function handleRedo() {
+    editRequestId.current += 1;
+    setEditLoading(false);
     setDocument((current) => redoDocument(current));
   }
 

@@ -4,7 +4,7 @@ See [PRODUCT_RULES.md](./PRODUCT_RULES.md) for the product positioning and archi
 
 VibeCraft Studio is an open source MVP for a browser-based Minecraft-style 3D voxel building editor. Type a building prompt, generate a validated BuildScript structure, inspect it in 3D, then export it as a WorldEdit `.schem` or Minecraft `.mcfunction` file.
 
-Edits can be planned by DeepSeek and are then executed by the local deterministic voxel engine. It does not connect to Minecraft yet.
+General edits can be planned by DeepSeek from component-aware context and are then executed by the local deterministic voxel engine. It does not connect to Minecraft yet.
 
 ## Features
 
@@ -18,7 +18,8 @@ Edits can be planned by DeepSeek and are then executed by the local deterministi
 - Inspector panel with size, block count, and used block palette.
 - Server-side Sponge `.schem` v2 export for WorldEdit on Minecraft Java 1.20.1, including palette, sparse-air, origin, and offset handling.
 - `.mcfunction` export using relative coordinates such as `setblock ~0 ~0 ~0 minecraft:stone_bricks`.
-- Iterative local edits with deterministic roof, window, chimney, path, floor, palette, and feature-removal operations.
+- Component-aware conversational edits using bounded fill, remove, replace, line, copy, and mirror tools across buildings and non-building subjects.
+- A clearly labeled limited local building-edit fallback when no DeepSeek API key is available.
 - Green/red instanced-mesh patch previews with Accept and Reject controls.
 - Immutable edit history with Undo and Redo.
 - Structure quality score, duplicate detection, and isolated-block warnings.
@@ -87,6 +88,8 @@ lib/operation-validation.ts
 lib/local-edit-parser.ts
 lib/patches.ts
 lib/voxel-tools.ts
+lib/voxel-edit-context.ts
+lib/deepseek-voxel-edit-planner.ts
 lib/build-script.ts
 lib/build-script-compiler.ts
 lib/build-script-structure-validator.ts

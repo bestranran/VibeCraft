@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DeepSeekBuildScriptError, generateWithDeepSeekBuildScript } from "@/lib/deepseek-build-script-planner";
 import { BUILD_SCRIPT_COMPILER_VERSION } from "@/lib/build-script-compiler";
-import { generateStructure } from "@/lib/generator";
+import { generateStructure, placeStructureInScene } from "@/lib/generator";
 import { promptSeed } from "@/lib/world-planner";
 
 export async function POST(request: Request) {
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         }, { status: 422 });
       }
     }
-    const structure = generateStructure(prompt);
+    const structure = placeStructureInScene(generateStructure(prompt));
     return NextResponse.json({
       structure,
       provider: "local",

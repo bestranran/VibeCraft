@@ -32,7 +32,7 @@ export function EditComposer({ value, pending, error, disabled, loading = false,
         }}
         rows={3}
         disabled={disabled || loading || Boolean(pending)}
-        placeholder="e.g. Make the roof 2 blocks taller"
+        placeholder="e.g. Make the left arm 2 blocks thicker"
         className="w-full resize-none rounded border border-line bg-coal p-3 text-sm leading-5 text-stone-100 placeholder:text-stone-500 disabled:cursor-not-allowed disabled:opacity-55"
       />
       {error && <p role="alert" className="mt-2 text-xs leading-5 text-[#ef9a8f]">{error}</p>}
@@ -50,7 +50,7 @@ export function EditComposer({ value, pending, error, disabled, loading = false,
           <CornerDownLeft className="h-4 w-4" aria-hidden /> {loading ? "DeepSeek is planning..." : "Preview edit"}
         </button>
       )}
-      <p className="mt-2 text-[11px] leading-4 text-stone-500">⌘/Ctrl + Enter to preview. Accept before entering another edit.</p>
+      <p className="mt-2 text-[11px] leading-4 text-stone-500">⌘/Ctrl + Enter to preview. Without an AI key, only a limited set of building edits is available.</p>
     </section>
   );
 }

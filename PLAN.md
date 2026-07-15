@@ -1,19 +1,22 @@
-# VibeCraft Studio MVP Execution Plan
+# VibeCraft Studio Product Execution Plan
+
+> Status: Milestones 1-6 are implemented. The active plan starts at Milestone 7 and focuses on general conversational editing.
 
 ## Product Goal
 
-Build a small but complete text-to-Minecraft workflow:
+Build a small but complete conversational text-to-Minecraft workflow:
 
 ```text
 User prompt
 -> AI-generated JSON BuildScript
 -> deterministic VibeCraft compiler
 -> editable VoxelStructure
--> browser preview and diff editing
+-> natural-language voxel edits
+-> browser diff preview, Accept/Reject, Undo/Redo
 -> .schem or .mcfunction export
 ```
 
-The MVP is successful when a user can describe a recognizable building, preview it, make a bounded natural-language edit, and load the exported `.schem` in Minecraft through WorldEdit.
+The product succeeds when a user can describe a recognizable building or object, preview it, correct specific parts through normal conversation, and load the accepted result in Minecraft through WorldEdit.
 
 ## Architecture Decision
 
@@ -172,21 +175,33 @@ If validation fails after successful compilation, DeepSeek may receive the origi
 
 ## Editing Workflow
 
-The MVP keeps the existing edit system:
+The active product direction replaces the legacy seven-operation building editor with general voxel-tool editing:
 
 ```text
 Accepted VoxelStructure
 -> user edit command
--> AI or local planner selects bounded edit operations
+-> component-aware structure summary
+-> AI returns bounded voxel tool calls
 -> deterministic local execution
 -> block-level diff preview
 -> Accept or Reject
 -> exact Undo and Redo
 ```
 
-Generated blocks keep `ownerId` values such as `main-house`, `main-roof`, or `front-porch`. Full semantic region editing is deferred, but these IDs create a stable upgrade path for later commands such as “change only the main roof.”
+Generated blocks keep `ownerId` values such as `left-arm`, `fountain-basin`, `main-house`, or `front-porch`. The editor summarizes each owner group by bounds, block count, and materials so the AI can target named parts without receiving every voxel as prompt text.
 
 BuildScript source should be stored with generated project metadata for reproducibility. `VoxelStructure` remains the source of truth for current preview, accepted edits, history, and export.
+
+The editable tool set is deliberately generic:
+
+- `fill`
+- `remove`
+- `replace`
+- `line`
+- `copy`
+- `mirror`
+
+The system enforces only execution safety: scene bounds, coordinate validity, materials, locked regions, call budgets, and changed-block budgets. It does not classify the subject or force doors, roofs, foundations, grounding, or architectural semantics.
 
 ## Minecraft Export
 
@@ -335,17 +350,97 @@ The MVP is release-ready when:
 - A generated build can be edited, undone, redone, and exported.
 - Representative `.schem` files load correctly in Minecraft.
 
-## Delivery Order
+## Milestone 7: General Conversational Editing
+
+### Goal
+
+Make generation quality recoverable through conversation. A user should be able to keep the current result and correct one part without regenerating the whole scene.
+
+### Work
+
+1. Add a component-aware edit context derived from the accepted `VoxelStructure`:
+   - Overall scene bounds and palette.
+   - Per-`ownerId` bounds, materials, and block count.
+   - Generation metadata and BuildScript operation IDs when available.
+   - Optional writable selection bounds when the UI later provides a selection.
+2. Add a DeepSeek voxel-edit planner that receives the current context and the user's exact instruction.
+3. Make the planner return validated `fill`, `remove`, `replace`, `line`, `copy`, and `mirror` calls.
+4. Allow one repair attempt only for invalid JSON or invalid tool-call format.
+5. Replace the legacy building-operation path in `/api/edit` with the general planner.
+6. Execute returned calls through the existing deterministic voxel engine.
+7. Convert the execution into the existing pending diff preview.
+8. Reuse Accept, Reject, Undo, Redo, history, locked regions, and export without changing their semantics.
+9. Keep the local seven-operation parser only as an explicitly labeled limited fallback when no AI key is available.
+
+### Safety Rules
+
+- Never mutate the accepted document before the user accepts the preview.
+- Never silently regenerate the full scene for an edit request.
+- Reject out-of-bounds coordinates and invalid tool schemas.
+- Enforce call, visited-coordinate, and changed-block budgets.
+- Preserve unrelated owner groups unless the user's instruction explicitly affects them.
+- Provider or planning failures leave the accepted structure byte-for-byte unchanged.
+
+### Acceptance
+
+- On a robot, “make the left arm two blocks thicker” changes the left arm without changing the torso or right arm.
+- On a fountain, “expand the basin and make the water blue” does not add a roof, door, or building facade.
+- On a building, “remove the chimney” removes the chimney without regenerating the building.
+- “Copy the right tower to the left” produces a bounded copy or mirror edit.
+- Every successful edit appears as a diff preview before it can affect the accepted structure.
+- Accept, Reject, Undo, and Redo remain lossless across several consecutive general edits.
+- Robot, fountain, and building fixtures all pass edit-scope and history tests.
+
+### Explicit Non-Goals
+
+- No manual subject classification.
+- No forced building semantics.
+- No multi-candidate generation.
+- No automatic aesthetic ranking.
+- No requirement that the first generation be final-quality.
+
+## Milestone 8: Project Persistence and Recovery
+
+### Work
+
+- Persist the accepted structure, generation metadata, semantic regions, history, future stack, and pending preview locally.
+- Restore the latest project after refresh.
+- Add a clear recovery path for incompatible or corrupted saved data.
+- Keep DeepSeek API keys in session-only storage; never persist them with the project.
+
+### Acceptance
+
+- Refresh restores the accepted project and edit history.
+- Undo and Redo still work after restoration.
+- A pending preview is either restored safely or discarded explicitly; it is never silently accepted.
+- Clearing a project removes its persisted local data.
+
+## Milestone 9: Conversational Workflow Evaluation
+
+Test complete user journeys rather than only first-generation quality:
+
+1. Generate a robot, make two localized geometry edits, change one material, undo, redo, and export.
+2. Generate a fountain, resize the basin, remove one decoration, and export.
+3. Generate a building, modify the roof and facade, reject one preview, accept another, and export.
+
+Release criteria:
+
+- At least 80% of the fixed edit prompts produce a valid preview without manual JSON repair.
+- No accepted edit changes coordinates outside the intended component or declared writable region in scope-controlled fixtures.
+- Failed edits never replace the accepted structure.
+- Restored projects export identically to the same project before refresh.
+- Representative exported `.schem` files still load in WorldEdit.
+
+## Active Delivery Order
 
 Implement sequentially and avoid unrelated feature expansion:
 
-1. BuildScript types and validation.
-2. Core shell and roof operations.
-3. Openings, details, and mirroring.
-4. Structural validation.
-5. DeepSeek BuildScript generation and one repair attempt.
-6. Editor and metadata integration.
-7. `.schem` export.
-8. Fixed-prompt evaluation and WorldEdit verification.
+1. Component-aware edit context.
+2. DeepSeek general voxel-edit planner.
+3. `/api/edit` migration and deterministic tool execution.
+4. Existing preview/history UI integration.
+5. Cross-subject edit-scope tests.
+6. Local persistence and recovery.
+7. Complete conversational workflow evaluation.
 
-Do not add authentic resource rendering, multi-version support, `.schem` import, districts, or additional AI providers until this vertical slice works reliably.
+Do not add authentic resource rendering, multi-version support, `.schem` import, multi-candidate generation, aesthetic ranking, or additional AI providers until the conversational edit loop works reliably.

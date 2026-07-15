@@ -219,3 +219,22 @@ export function generateStructure(prompt: string): VoxelStructure {
 
   return addMedievalCottage();
 }
+
+export function placeStructureInScene(structure: VoxelStructure): VoxelStructure {
+  if (!structure.blocks.length) return { ...structure, size: [...structure.size], blocks: [] };
+  const minX = Math.min(...structure.blocks.map((block) => block.x));
+  const maxX = Math.max(...structure.blocks.map((block) => block.x));
+  const minY = Math.min(...structure.blocks.map((block) => block.y));
+  const maxY = Math.max(...structure.blocks.map((block) => block.y));
+  const minZ = Math.min(...structure.blocks.map((block) => block.z));
+  const maxZ = Math.max(...structure.blocks.map((block) => block.z));
+  if (maxX - minX >= 64 || maxY - minY >= 64 || maxZ - minZ >= 64) throw new Error("The local fixture does not fit inside the 64×64×64 scene.");
+  const offsetX = Math.floor((63 - (maxX - minX)) / 2) - minX;
+  const offsetY = minY < 0 ? -minY : 0;
+  const offsetZ = Math.floor((63 - (maxZ - minZ)) / 2) - minZ;
+  return {
+    ...structure,
+    size: [...structure.size],
+    blocks: structure.blocks.map((block) => ({ ...block, x: block.x + offsetX, y: block.y + offsetY, z: block.z + offsetZ }))
+  };
+}
