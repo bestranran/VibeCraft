@@ -1,18 +1,33 @@
-import type { BuildingDocument, EditTransaction, PendingEdit, SemanticRegion, VoxelStructure, WorldPlan } from "./structure";
+import type { BuildingDocument, EditTransaction, GenerationMetadata, PendingEdit, SemanticRegion, VoxelStructure, WorldPlan, WorldPlanMetadata } from "./structure";
 
 export function cloneStructure(structure: VoxelStructure): VoxelStructure {
   return { ...structure, size: [...structure.size], blocks: structure.blocks.map((block) => ({ ...block })) };
 }
 
-export function createBuildingDocument(structure: VoxelStructure, metadata?: { worldPlan?: WorldPlan; semanticRegions?: SemanticRegion[] }): BuildingDocument {
+export function cloneGenerationMetadata(metadata: GenerationMetadata): GenerationMetadata {
+  return structuredClone(metadata);
+}
+
+export function createBuildingDocument(structure: VoxelStructure, metadata?: { generationMetadata?: GenerationMetadata; worldPlan?: WorldPlan; worldPlanMetadata?: WorldPlanMetadata; semanticRegions?: SemanticRegion[] }): BuildingDocument {
   const semanticRegions = metadata?.semanticRegions ?? metadata?.worldPlan?.regions ?? [];
   return {
     structure: cloneStructure(structure),
+    ...(metadata?.generationMetadata ? { generationMetadata: cloneGenerationMetadata(metadata.generationMetadata) } : {}),
     ...(metadata?.worldPlan ? { worldPlan: metadata.worldPlan } : {}),
+    ...(metadata?.worldPlanMetadata ? { worldPlanMetadata: { ...metadata.worldPlanMetadata } } : {}),
     semanticRegions: semanticRegions.map((region) => ({ ...region, bounds: { ...region.bounds } })),
     history: [],
     future: [],
     pendingEdit: null
+  };
+}
+
+export function setWorldPlan(document: BuildingDocument, worldPlan: WorldPlan, metadata: WorldPlanMetadata): BuildingDocument {
+  return {
+    ...document,
+    worldPlan,
+    worldPlanMetadata: { ...metadata },
+    semanticRegions: worldPlan.regions.map((region) => ({ ...region, bounds: { ...region.bounds } }))
   };
 }
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { Bounds, OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BLOCK_COLORS } from "@/lib/structure";
+import { getBlockColor } from "@/lib/structure";
 import { coordinateKey } from "@/lib/patches";
 import type { BlockId, PendingEdit, VoxelBlock, VoxelStructure } from "@/lib/structure";
 
@@ -24,9 +24,11 @@ export function VoxelCanvas({ structure, pendingEdit }: VoxelCanvasProps) {
       <ambientLight intensity={0.65} />
       <directionalLight position={[10, 14, 8]} intensity={1.15} castShadow shadow-mapSize={[2048, 2048]} />
       <directionalLight position={[-8, 8, -6]} intensity={0.35} />
-      <VoxelScene structure={structure} pendingEdit={pendingEdit} />
+      <Bounds fit clip observe margin={1.25} maxDuration={0.8}>
+        <VoxelScene structure={structure} pendingEdit={pendingEdit} />
+      </Bounds>
       <GridFloor />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={5} maxDistance={42} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={5} maxDistance={140} />
     </Canvas>
   );
 }
@@ -41,15 +43,21 @@ function VoxelScene({ structure, pendingEdit }: VoxelCanvasProps) {
     return { normal, added, removed };
   }, [pendingEdit, structure.blocks]);
   const groups = useMemo(() => groupBlocks(scene.normal), [scene.normal]);
+  const center = useMemo(() => {
+    const blocks = pendingEdit?.preview.blocks ?? structure.blocks;
+    if (!blocks.length) return [0, 0.5, 0] as const;
+    const xs = blocks.map((block) => block.x); const zs = blocks.map((block) => block.z);
+    return [-((Math.min(...xs) + Math.max(...xs)) / 2), 0.5, -((Math.min(...zs) + Math.max(...zs)) / 2)] as const;
+  }, [pendingEdit, structure.blocks]);
 
   if (structure.blocks.length === 0 && !pendingEdit) {
     return null;
   }
 
   return (
-    <group position={[0, 0.5, 0]}>
+    <group position={center}>
       {Object.entries(groups).map(([id, blocks]) => (
-        <InstancedBlocks key={id} id={id as BlockId} blocks={blocks} />
+        <InstancedBlocks key={id} id={id as BlockId} blocks={blocks ?? []} />
       ))}
       <InstancedEdges blocks={scene.normal} />
       {scene.added.length > 0 && <PreviewBlocks blocks={scene.added} color="#41d69a" opacity={0.72} />}
@@ -99,7 +107,7 @@ function InstancedBlocks({ id, blocks }: { id: BlockId; blocks: VoxelBlock[] }) 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, blocks.length]} castShadow receiveShadow>
       <boxGeometry args={[0.98, 0.98, 0.98]} />
-      <meshStandardMaterial color={BLOCK_COLORS[id]} roughness={0.82} metalness={0.02} />
+      <meshStandardMaterial color={getBlockColor(id)} roughness={0.82} metalness={0.02} />
     </instancedMesh>
   );
 }
@@ -131,9 +139,9 @@ function InstancedEdges({ blocks }: { blocks: VoxelBlock[] }) {
 function GridFloor() {
   return (
     <group>
-      <gridHelper args={[32, 32, "#6f7f4f", "#36352f"]} position={[0, -0.02, 0]} />
+      <gridHelper args={[72, 72, "#6f7f4f", "#36352f"]} position={[0, -0.02, 0]} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
-        <planeGeometry args={[32, 32]} />
+        <planeGeometry args={[72, 72]} />
         <meshStandardMaterial color="#202018" roughness={1} />
       </mesh>
     </group>
@@ -141,21 +149,8 @@ function GridFloor() {
 }
 
 function groupBlocks(blocks: VoxelBlock[]) {
-  return blocks.reduce<Record<BlockId, VoxelBlock[]>>((acc, block) => {
-    acc[block.id].push(block);
+  return blocks.reduce<Partial<Record<BlockId, VoxelBlock[]>>>((acc, block) => {
+    (acc[block.id] ??= []).push(block);
     return acc;
-  }, {
-    "minecraft:oak_planks": [],
-    "minecraft:spruce_planks": [],
-    "minecraft:stone_bricks": [],
-    "minecraft:cobblestone": [],
-    "minecraft:glass_pane": [],
-    "minecraft:oak_log": [],
-    "minecraft:spruce_stairs": [],
-    "minecraft:brick": [],
-    "minecraft:sandstone": [],
-    "minecraft:red_sandstone": [],
-    "minecraft:dark_oak_planks": [],
-    "minecraft:lantern": []
-  });
+  }, {});
 }

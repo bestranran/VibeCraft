@@ -15,5 +15,5 @@ test("validates a combined DeepSeek operation plan", () => {
 test("rejects invented operations, materials, and unsafe bounds", () => {
   assert.throws(() => validateBuildingOperations([{ type: "destroyBuilding" }]), /Unsupported operation/);
   assert.throws(() => validateBuildingOperations([{ type: "addFloor", count: 99 }]), /count must be/);
-  assert.throws(() => validateBuildingOperations([{ type: "changePalette", to: "minecraft:diamond_block" }]), /target block/);
+  assert.throws(() => validateBuildingOperations([{ type: "changePalette", to: "mod:diamond_block" }]), /target block/);
 });

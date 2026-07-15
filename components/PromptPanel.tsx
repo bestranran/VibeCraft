@@ -1,6 +1,6 @@
 "use client";
 
-import { Hammer, Play } from "lucide-react";
+import { Hammer, Map, Play } from "lucide-react";
 import { EXAMPLE_PROMPTS } from "@/lib/structure";
 import { EditComposer } from "@/components/EditComposer";
 import type { PendingEdit } from "@/lib/structure";
@@ -11,6 +11,9 @@ type PromptPanelProps = {
   onGenerate: (prompt?: string) => void;
   generateLoading?: boolean;
   generateError?: string | null;
+  generateInfo?: string | null;
+  planLoading?: boolean;
+  planError?: string | null;
   editPrompt: string;
   pendingEdit: PendingEdit | null;
   editError: string | null;
@@ -18,12 +21,13 @@ type PromptPanelProps = {
   editLoading?: boolean;
   plannerLabel?: string;
   onEditPromptChange: (prompt: string) => void;
+  onPlanDistrict: () => void;
   onPreviewEdit: () => void;
   onAcceptEdit: () => void;
   onRejectEdit: () => void;
 };
 
-export function PromptPanel({ prompt, onPromptChange, onGenerate, generateLoading = false, generateError, editPrompt, pendingEdit, editError, editDisabled, editLoading, plannerLabel, onEditPromptChange, onPreviewEdit, onAcceptEdit, onRejectEdit }: PromptPanelProps) {
+export function PromptPanel({ prompt, onPromptChange, onGenerate, generateLoading = false, generateError, generateInfo, planLoading = false, planError, editPrompt, pendingEdit, editError, editDisabled, editLoading, plannerLabel, onEditPromptChange, onPlanDistrict, onPreviewEdit, onAcceptEdit, onRejectEdit }: PromptPanelProps) {
   return (
     <aside className="flex flex-col gap-4 bg-panel p-4 lg:min-h-screen">
       <div className="flex items-center gap-2 border-b border-line pb-3">
@@ -47,6 +51,12 @@ export function PromptPanel({ prompt, onPromptChange, onGenerate, generateLoadin
         />
       </label>
 
+      <button type="button" onClick={onPlanDistrict} disabled={planLoading || generateLoading || !prompt.trim()} className="inline-flex h-10 items-center justify-center gap-2 rounded border border-[#668477] bg-[#405d52] px-4 text-sm font-semibold text-stone-100 transition hover:bg-[#4b6c60] disabled:opacity-50">
+        <Map className="h-4 w-4" aria-hidden />
+        {planLoading ? "Planning 64×64 district…" : "Plan District"}
+      </button>
+      {planError && <p role="alert" className="-mt-2 text-xs leading-5 text-[#ef9a8f]">{planError}</p>}
+
       <button
         type="button"
         onClick={() => onGenerate()}
@@ -54,9 +64,10 @@ export function PromptPanel({ prompt, onPromptChange, onGenerate, generateLoadin
         className="inline-flex h-10 items-center justify-center gap-2 rounded border border-[#8a7140] bg-sand px-4 text-sm font-semibold text-[#252016] transition hover:bg-[#dfc17b]"
       >
         <Play className="h-4 w-4 fill-current" aria-hidden />
-        {generateLoading ? "DeepSeek is designing..." : "Generate"}
+        {generateLoading ? "Planning and validating BuildScript..." : "Generate Building"}
       </button>
       {generateError && <p role="alert" className="-mt-2 text-xs leading-5 text-[#ef9a8f]">{generateError}</p>}
+      {generateInfo && !generateError && <p className="-mt-2 text-xs leading-5 text-[#70d3aa]">{generateInfo}</p>}
 
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Examples</p>

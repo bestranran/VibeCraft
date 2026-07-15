@@ -1,324 +1,351 @@
-# VibeCraft Studio Execution Plan
-
-This plan follows the selected direction: a text-only AI building agent powered by external APIs. VibeCraft will not train a model and will not require image understanding for the first product milestone.
+# VibeCraft Studio MVP Execution Plan
 
 ## Product Goal
 
-Create a Minecraft building workspace where a user can describe a scene, receive a structured voxel build, and continue changing bounded parts through natural language:
+Build a small but complete text-to-Minecraft workflow:
 
 ```text
-Text prompt
--> AI world plan
--> staged voxel tools
--> structural validation
--> 3D diff preview
--> accept, reject, undo, or redo
--> Minecraft export
+User prompt
+-> AI-generated JSON BuildScript
+-> deterministic VibeCraft compiler
+-> editable VoxelStructure
+-> browser preview and diff editing
+-> .schem or .mcfunction export
 ```
 
-The first target is a coherent, editable `64×64` themed district, not an infinite world and not a one-shot screenshot recreation.
+The MVP is successful when a user can describe a recognizable building, preview it, make a bounded natural-language edit, and load the exported `.schem` in Minecraft through WorldEdit.
 
-## Scope Rules
+## Architecture Decision
+
+AI generates a declarative JSON BuildScript, not raw per-block output, arbitrary Python, or `.schem` binary data.
+
+```text
+AI                       design, proportions, materials, composition
+BuildScript compiler     exact geometry and architectural invariants
+VoxelStructure           preview, diff, history, and editing source of truth
+mcschematic              final .schem serialization only
+```
+
+BuildScript is a small VibeCraft-owned API. Its operations compile to the existing primitive voxel tools (`fill`, `remove`, `replace`, `line`, `copy`, and `mirror`). This preserves the current editor and avoids coupling generation to one export format.
+
+## MVP Scope
 
 ### Included
 
-- Text-only DeepSeek API integration.
-- One `64×64` scene with bounded height.
-- District, road, lot, building, bridge, pipe, sign, and lighting concepts.
-- Tool-based construction instead of raw per-block model output.
-- Multi-stage generation with progress.
-- Region-aware follow-up edits.
-- Diff preview, Accept/Reject, Undo/Redo, and export.
+- Text-only DeepSeek generation.
+- JSON BuildScript v1.
+- One bounded `64 x 64 x 64` scene.
+- A maximum of approximately `100,000` generated blocks.
+- Deterministic local compilation into `VoxelStructure`.
+- Existing browser voxel preview.
+- Existing natural-language edit preview, Accept/Reject, Undo, and Redo.
+- Basic structural validation and one bounded AI repair attempt.
+- Minecraft Java Edition 1.20.1 as the initial export target.
+- `.schem` export through a server-side mcschematic adapter.
+- Existing `.mcfunction` export.
 
 ### Deferred
 
+- AI-generated or executed arbitrary Python.
+- Resource-pack importing and authentic Minecraft textures.
+- Accurate models for stairs, doors, fences, lanterns, and other non-cube blocks.
+- Complete block-state and orientation support.
+- Multiple Minecraft versions.
+- `.schem` import.
 - Screenshot or reference-image input.
-- Training or hosting custom models.
-- Infinite terrain and world streaming.
-- Fully generated interiors for every building.
-- Multiplayer collaboration.
-- Direct world modification through a mod.
-- Photorealistic Minecraft rendering.
+- Infinite terrain, large districts, and world streaming.
+- Multiplayer collaboration and direct server/world modification.
+- Model training or hosting.
 
-## Core Architecture
+## BuildScript v1
 
-### 1. World Plan
-
-DeepSeek converts the user's prompt into a bounded semantic plan. It does not output thousands of block coordinates.
+BuildScript is versioned JSON with explicit bounds, a palette, and an ordered list of high-level building operations.
 
 ```ts
-type WorldPlan = {
-  id: string;
+type BuildScript = {
+  version: 1;
   name: string;
-  theme: ThemeSpec;
-  bounds: { width: 64; depth: 64; maxHeight: number };
-  roads: RoadSpec[];
-  lots: LotSpec[];
-  landmarks: LandmarkSpec[];
-  connections: ConnectionSpec[];
-};
-
-type LotSpec = {
-  id: string;
-  bounds: Box2D;
-  purpose: "residential" | "commercial" | "industrial" | "utility";
-  building: BuildingSpec;
-  locked?: boolean;
+  bounds: { width: 64; depth: 64; maxHeight: 64 };
+  palette: Record<string, BlockId>;
+  operations: BuildScriptOperation[];
 };
 ```
 
-The accepted `WorldPlan` is stored alongside `VoxelStructure`. Semantic IDs allow later requests such as “keep the central tower” or “make the west residential area denser.”
+Example:
 
-### 2. Voxel Tool Protocol
-
-The model plans with high-level and batch tools. TypeScript implementations perform exact coordinate work.
-
-Initial tool set:
-
-```ts
-type VoxelToolCall =
-  | CreateFoundation
-  | CreateBuildingShell
-  | CreateGableRoof
-  | CreateFlatRoof
-  | CutEntrance
-  | AddWindows
-  | AddBalcony
-  | AddFacadePattern
-  | CreateRoad
-  | CreateBridge
-  | AddPipes
-  | AddNeonSign
-  | PlaceLights
-  | ReplaceRegion
-  | ClearRegion;
+```json
+{
+  "version": 1,
+  "name": "japanese-house",
+  "bounds": { "width": 64, "depth": 64, "maxHeight": 64 },
+  "palette": {
+    "foundation": "minecraft:stone_bricks",
+    "walls": "minecraft:oak_planks",
+    "roof": "minecraft:spruce_planks",
+    "accent": "minecraft:dark_oak_planks",
+    "glass": "minecraft:glass_pane"
+  },
+  "operations": [
+    {
+      "type": "hollowBox",
+      "id": "main-house",
+      "origin": [20, 1, 22],
+      "size": [20, 8, 16],
+      "wall": "minecraft:oak_planks",
+      "floor": "minecraft:stone_bricks"
+    },
+    {
+      "type": "gableRoof",
+      "id": "main-roof",
+      "target": "main-house",
+      "height": 5,
+      "overhang": 2,
+      "material": "minecraft:spruce_planks"
+    }
+  ]
+}
 ```
 
-Every tool must:
+### Initial Operations
 
-- Validate arguments before execution.
-- Stay inside scene and selection bounds.
-- Produce a deterministic `StructurePatch`.
-- Report actual blocks added, removed, skipped, or replaced.
-- Be invertible through the existing history system.
-- Refuse unsupported materials or oversized operations.
+BuildScript v1 should remain deliberately small:
 
-### 3. Staged Build Pipeline
+1. `foundation`
+2. `hollowBox`
+3. `cylinder`
+4. `gableRoof`
+5. `flatRoof`
+6. `entrance`
+7. `windows`
+8. `porch`
+9. `path`
+10. `copyMirror`
 
-Generation runs in visible stages:
+Each operation must:
 
-1. Plan theme, roads, lots, and landmarks.
-2. Build ground and roads.
-3. Build shells and roofs.
-4. Cut entrances and windows.
-5. Add facades, bridges, pipes, signs, and lights.
-6. Validate and repair.
-7. Present one complete pending preview.
+- Validate all arguments before compilation.
+- Stay inside the scene bounds.
+- Use an allowed material.
+- Produce deterministic voxel operations.
+- Carry a semantic `ownerId` into generated blocks.
+- Respect operation, coordinate, and changed-block budgets.
+- Report the blocks it added, removed, replaced, or skipped.
 
-The accepted structure remains untouched until the user accepts the final patch.
+## Generation Workflow
 
-### 4. Region-Aware Editing
-
-Each generated block should be traceable to a semantic owner such as `road-main`, `lot-west-2`, or `landmark-central-tower`.
-
-Follow-up editing flow:
+The initial generation request follows this pipeline:
 
 ```text
-User command
--> resolve target region and locked regions
--> plan tool calls
--> enforce bounds and locks
--> execute against a copy
--> validate
--> show diff
+User prompt
+-> DeepSeek receives BuildScript API documentation, rules, and a few examples
+-> DeepSeek returns one complete BuildScript JSON document
+-> schema, material, reference, and budget validation
+-> compile high-level operations into primitive voxel tool calls
+-> execute locally into a candidate VoxelStructure
+-> structural validation
+-> optional single AI repair attempt with concrete diagnostics
+-> return the candidate to the existing 3D editor
 ```
 
-Locked or explicitly preserved regions must not change.
+The model chooses style, dimensions, palette, composition, and operation parameters. The compiler owns coordinate math and guarantees for hollow shells, connected roofs, safe openings, and bounds.
 
-## Milestone 1: Agent Foundation
+No provider response may directly replace the accepted structure before local validation succeeds.
 
-### Goal
+## Validation and Repair
 
-Replace the current fixed generation path with a safe tool execution foundation while preserving the existing editor workflow.
+The MVP validator checks concrete structural failures rather than attempting a complete aesthetic score.
 
-### Work
+Required checks:
 
-- Define `WorldPlan`, scene bounds, semantic regions, and tool-call schemas.
-- Implement primitive tools: `fill`, `remove`, `replace`, `line`, `copy`, and `mirror`.
-- Implement tool budgets for calls, coordinates, and changed blocks.
-- Combine tool patches into one pending transaction.
-- Add unit tests for bounds, collisions, determinism, inversion, and locked regions.
-- Keep the existing local generator as an offline fixture, not the primary product path.
+- All operations and blocks remain inside bounds.
+- The structure does not exceed block budgets.
+- Referenced component IDs exist.
+- A requested building has a traversable entrance.
+- Main interiors remain hollow.
+- Roof geometry is connected.
+- The primary structure has an acceptable connected-component ratio.
+- Large floating components are rejected.
+- The palette contains basic material contrast.
+- No duplicate coordinates remain in the compiled structure.
 
-### Acceptance
+If validation fails after successful compilation, DeepSeek may receive the original BuildScript plus concise diagnostics and return one complete corrected BuildScript. A second failure is shown to the user without replacing their current structure.
 
-- A deterministic tool plan creates the same patch every time.
-- A tool cannot write outside `64×64` or above the height limit.
-- Locked regions remain byte-for-byte unchanged.
-- A multi-tool preview supports Accept, Reject, Undo, and Redo.
+## Editing Workflow
 
-## Milestone 2: World Planner
-
-### Goal
-
-Convert one text prompt into a valid city layout before placing blocks.
-
-### Work
-
-- Add `/api/world/plan` using DeepSeek structured JSON output.
-- Validate road widths, lot bounds, overlap, density, height, and material choices.
-- Implement deterministic road and lot subdivision.
-- Add a 2D plan preview or top-down overlay before voxel generation.
-- Let users regenerate the plan without spending time compiling voxels.
-- Store provider, prompt, seed, and plan version in the project document.
-
-### Acceptance
-
-Given:
+The MVP keeps the existing edit system:
 
 ```text
-Create a compact cyberpunk district with one main road, six buildings of varied height,
-a neon corporate tower, and two elevated walkways.
+Accepted VoxelStructure
+-> user edit command
+-> AI or local planner selects bounded edit operations
+-> deterministic local execution
+-> block-level diff preview
+-> Accept or Reject
+-> exact Undo and Redo
 ```
 
-The planner returns:
+Generated blocks keep `ownerId` values such as `main-house`, `main-roof`, or `front-porch`. Full semantic region editing is deferred, but these IDs create a stable upgrade path for later commands such as “change only the main roof.”
 
-- One connected main road.
-- Six non-overlapping buildable lots.
-- One clearly identified central landmark.
-- Two valid bridge connections.
-- All geometry inside `64×64` bounds.
+BuildScript source should be stored with generated project metadata for reproducibility. `VoxelStructure` remains the source of truth for current preview, accepted edits, history, and export.
 
-## Milestone 3: District Compiler
+## Minecraft Export
 
-### Goal
-
-Compile a valid `WorldPlan` into a recognizable, navigable voxel district.
-
-### Work
-
-- Implement `createRoad`, `createFoundation`, `createBuildingShell`, `createFlatRoof`, and `createGableRoof`.
-- Implement entrances, windows, facade patterns, balconies, and roof equipment.
-- Implement cyberpunk details: pipes, signs, lights, vents, and elevated walkways.
-- Add deterministic variation through project seeds.
-- Associate generated blocks with semantic region IDs.
-- Group instanced rendering by block and preview state.
-
-### Acceptance
-
-- The district contains six visually distinguishable buildings.
-- Every required building has a traversable entrance.
-- Roofs and bridges are connected and supported.
-- Roads connect scene boundaries to the central area.
-- The central tower reads as the dominant landmark.
-- The same plan and seed produce the same blocks.
-
-## Milestone 4: Validation and Repair
-
-### Goal
-
-Prevent obvious structural failures before a preview reaches the user.
-
-### Work
-
-- Detect disconnected components, floating roof layers, open gables, blocked entrances, unsupported bridges, collisions, and unreachable roads.
-- Report separate metrics for structural validity, proportions, material balance, repetition, and detail density.
-- Implement deterministic repairs for common failures.
-- Allow DeepSeek one bounded repair-planning pass when deterministic repair is insufficient.
-- Keep failed candidates out of the accepted document.
-
-### Acceptance
-
-- Known malformed fixtures are rejected or repaired.
-- Validation identifies the semantic region responsible for each error.
-- Repair cannot modify locked regions.
-- The quality panel explains concrete problems instead of showing only one score.
-
-## Milestone 5: Vibe Editing Loop
-
-### Goal
-
-Support useful regional follow-up commands without rebuilding the whole district.
-
-### Work
-
-- Add `/api/world/edit` with current plan summary, semantic regions, locks, and available tools.
-- Resolve references such as east, west, central tower, residential area, and main road.
-- Add region selection and lock/unlock controls in the editor.
-- Show affected regions and estimated block changes before execution.
-- Add staged progress, cancellation, and provider diagnostics.
-
-### Acceptance
-
-After generating the district, this command must work:
+`.schem` export happens after generation and editing; it is not an AI output format.
 
 ```text
-Keep the central tower. Make the west residential area denser,
-add more pipes, and connect its two tallest buildings with a bridge.
+Accepted VoxelStructure
+-> validate block IDs and dimensions
+-> normalize origin and offsets
+-> server-side mcschematic adapter
+-> return .schem binary
 ```
 
-Success means:
+Suggested layout:
 
-- The central tower has zero block changes.
-- Only west-region lots and the new connection change.
-- The new bridge is supported and connects valid facades.
-- Reject restores the original preview; Accept, Undo, and Redo are exact.
+```text
+app/api/export/schem/route.ts
+services/schematic-exporter/export_schem.py
+services/schematic-exporter/requirements.txt
+```
 
-## Milestone 6: Minecraft Compatibility
+The export menu offers:
 
-### Goal
+```text
+Export
+|- WorldEdit Schematic (.schem)
+`- Minecraft Function (.mcfunction)
+```
 
-Make the district useful outside the browser.
+The MVP exports base block IDs. Accurate orientation and complete BlockState preservation remain deferred until the core generation loop is validated.
+
+## Milestone 1: BuildScript Foundation
 
 ### Work
 
-- Introduce a Minecraft-version-specific `BlockRegistry`.
-- Replace the small hard-coded `BlockId` union.
-- Add user-provided resource-pack texture loading with fallback rendering.
-- Implement Sponge `.schem` import and export.
-- Preserve block states and offsets.
-- Keep `.mcfunction` export for simple builds and debugging.
+- Add BuildScript v1 TypeScript types.
+- Implement schema and cross-reference validation.
+- Implement `foundation`, `hollowBox`, `gableRoof`, and `flatRoof`.
+- Compile these operations into the existing voxel tool protocol.
+- Preserve semantic owner IDs.
+- Add deterministic compiler fixtures and budget tests.
 
 ### Acceptance
 
-- The selected Java version exposes its valid block registry.
-- A generated district exports to `.schem` without losing supported states.
-- Importing the exported fixture reproduces the same structure.
-- No proprietary Minecraft textures are committed to the repository.
+- The same BuildScript always creates the same blocks.
+- Invalid references, materials, dimensions, or bounds are rejected before execution.
+- A basic hollow building with either roof type compiles without duplicate coordinates.
+- Existing primitive voxel-tool tests remain green.
 
-## Suggested Delivery Order
+## Milestone 2: Complete BuildScript v1
 
-Work in this order and avoid parallel feature expansion:
+### Work
 
-1. Tool schemas and executor.
-2. Locked semantic regions.
-3. World planner.
-4. Roads, lots, shells, and roofs.
-5. Entrances and validation.
-6. Cyberpunk detail tools.
-7. Regional follow-up edits.
-8. Versioned registry and `.schem`.
+- Implement `cylinder`, `entrance`, `windows`, `porch`, `path`, and `copyMirror`.
+- Prevent windows from overwriting entrances and critical supports.
+- Ensure roof and entrance helpers derive their geometry from target components.
+- Add structural validation for entrances, hollow interiors, connectivity, and floating components.
 
-## First Vertical Slice
+### Acceptance
 
-The first public demo should do exactly this:
+- The compiler can express medieval, Japanese, desert, modern, and cyberpunk test buildings.
+- Every building fixture has a traversable entrance and hollow main interior.
+- Roof fixtures are connected and remain inside bounds.
+- Mirrored or copied components remain deterministic and preserve ownership metadata.
 
-```text
-Prompt: Build a dense 64×64 cyberpunk district with six buildings,
-a central neon tower, one main road, pipes, signs, and two skybridges.
+## Milestone 3: DeepSeek BuildScript Planner
 
-Result: A structurally valid district appears in 3D.
+### Work
 
-Edit: Keep the central tower. Make the west side denser and add more pipes.
+- Replace staged low-level generation output with one complete BuildScript JSON response.
+- Provide the model with concise API documentation and two to four varied examples.
+- Validate provider output before compilation.
+- Return concrete validation diagnostics.
+- Allow one complete-script repair attempt.
+- Preserve the existing local generator as an offline fallback and test fixture.
 
-Result: Only the west region changes, with a diff preview and exact undo.
-```
+### Acceptance
 
-Do not add screenshot input, infinite worlds, or additional providers until this slice works reliably.
+- Fixed evaluation prompts usually compile on the first attempt or after one repair.
+- Provider errors never replace the current accepted structure.
+- Different architectural prompts produce meaningfully different geometry, not only palette changes.
+- The UI reports provider, operation count, block count, and validation warnings.
 
-## Decisions Before Implementation
+## Milestone 4: Editor Integration
 
-- Maximum scene height: recommended `64` blocks.
-- Initial cyberpunk palette before the complete registry is available.
-- Whether the plan preview is a lightweight 2D overlay or a top-down 3D mode.
-- The first supported Minecraft Java version for `.schem` export.
+### Work
+
+- Return the compiled `VoxelStructure` through the existing generation API.
+- Reuse the current Three.js preview and inspector.
+- Preserve current edit preview, Accept/Reject, Undo, and Redo behavior.
+- Store BuildScript source, seed, provider, and compiler version as project metadata.
+- Keep generated `ownerId` values through patches and history.
+
+### Acceptance
+
+- A generated building can be edited without regenerating the full structure.
+- Reject leaves the accepted structure unchanged.
+- Accept, Undo, and Redo reproduce exact block states.
+- Generation and editing failures preserve the current document.
+
+## Milestone 5: `.schem` Export
+
+### Work
+
+- Add the server-side mcschematic adapter.
+- Add coordinate normalization, version selection, temporary-file cleanup, and response headers.
+- Add `.schem` to the export UI while retaining `.mcfunction`.
+- Add exporter fixtures for negative coordinates and sparse palettes.
+- Validate representative files in Minecraft with WorldEdit.
+
+### Acceptance
+
+- WorldEdit loads the exported `.schem` successfully.
+- Width, height, depth, origin, materials, and base block placement match the browser structure.
+- Export always uses the accepted structure, never an unaccepted preview.
+- Export failures do not modify the project.
+
+## Milestone 6: MVP Evaluation and Release
+
+Use a fixed prompt set covering:
+
+- Medieval cottage.
+- Japanese house.
+- Desert tower.
+- Modern villa.
+- Cyberpunk shop.
+
+Evaluate:
+
+- Prompt and style adherence.
+- Recognizable silhouette.
+- Entrance validity.
+- Hollow interior validity.
+- Roof connectivity.
+- Material contrast.
+- Compilation success rate.
+- Determinism for the same script and seed.
+- Edit, diff, and history correctness.
+- Successful WorldEdit import.
+
+The MVP is release-ready when:
+
+- Most evaluation prompts compile on the first attempt or after one repair.
+- All accepted results stay within bounds and budgets.
+- The five styles are structurally distinct.
+- A generated build can be edited, undone, redone, and exported.
+- Representative `.schem` files load correctly in Minecraft.
+
+## Delivery Order
+
+Implement sequentially and avoid unrelated feature expansion:
+
+1. BuildScript types and validation.
+2. Core shell and roof operations.
+3. Openings, details, and mirroring.
+4. Structural validation.
+5. DeepSeek BuildScript generation and one repair attempt.
+6. Editor and metadata integration.
+7. `.schem` export.
+8. Fixed-prompt evaluation and WorldEdit verification.
+
+Do not add authentic resource rendering, multi-version support, `.schem` import, districts, or additional AI providers until this vertical slice works reliably.

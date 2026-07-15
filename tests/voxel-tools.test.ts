@@ -55,7 +55,14 @@ test("budgets and runtime schemas reject unsafe plans", () => {
     { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:brick" },
     { type: "fill", from: [1, 0, 0], to: [1, 0, 0], material: "minecraft:brick" }
   ], { budgets: { maxCalls: 1 } }), /call budget/);
-  assert.throws(() => validateVoxelToolCalls([{ type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:diamond_block" }]), VoxelToolError);
+  assert.throws(() => executeVoxelTools(empty, [{ type: "fill", from: [0, 0, 0], to: [2, 0, 0], material: "minecraft:brick" }], { budgets: { maxChangedBlocks: 2 } }), /unique changed-block budget/);
+  const repeatedlyChanged = executeVoxelTools(empty, [
+    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:brick" },
+    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:sandstone" },
+    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:stone_bricks" }
+  ], { budgets: { maxChangedBlocks: 1 } });
+  assert.equal(repeatedlyChanged.patch.changes.length, 1);
+  assert.throws(() => validateVoxelToolCalls([{ type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "mod:diamond_block" }]), VoxelToolError);
 });
 
 test("a tool plan participates in accept, reject, undo, and redo as one transaction", () => {

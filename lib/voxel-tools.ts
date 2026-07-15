@@ -164,7 +164,6 @@ export function executeVoxelTools(
   const map: BlockMap = new Map(base.blocks.map((block) => [coordinateKey(block), { ...block }]));
   const reports: VoxelToolReport[] = [];
   let totalVisited = 0;
-  let totalChanged = 0;
 
   const isLocked = (point: Position) => locked.some((region) => contains(region.bounds, point));
   const visit = (point: Position) => {
@@ -217,12 +216,11 @@ export function executeVoxelTools(
     }
     const after = normalizeStructure({ ...base, blocks: Array.from(map.values()) });
     const counts = countPatch(diffStructures(before, after));
-    totalChanged += counts.added + counts.removed + counts.replaced;
-    if (totalChanged > budgets.maxChangedBlocks) throw new VoxelToolError(`Tool plan exceeds the ${budgets.maxChangedBlocks.toLocaleString()} changed-block budget.`);
     reports.push({ type: call.type, ...counts, skipped, visited });
   }
   const result = normalizeStructure({ ...base, blocks: Array.from(map.values()) });
   const patch = diffStructures(base, result);
+  if (patch.changes.length > budgets.maxChangedBlocks) throw new VoxelToolError(`Final tool plan exceeds the ${budgets.maxChangedBlocks.toLocaleString()} unique changed-block budget.`);
   if (!patch.changes.length) throw new VoxelToolError("The tool plan does not change the structure.");
   return { structure: result, patch, reports };
 }

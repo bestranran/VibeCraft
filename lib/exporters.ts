@@ -19,9 +19,17 @@ export function exportMcFunction(structure: VoxelStructure): string {
 }
 
 export function toMcFunctionFilename(name: string) {
-  return `${name
+  return `${exportFilenameBase(name)}.mcfunction`;
+}
+
+export function toSchematicFilename(name: string) {
+  return `${exportFilenameBase(name)}.schem`;
+}
+
+function exportFilenameBase(name: string) {
+  return name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "vibecraft-structure"}.mcfunction`;
+    .replace(/^-+|-+$/g, "") || "vibecraft-structure";
 }

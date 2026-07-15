@@ -6,14 +6,15 @@ import { ApiKeyDialog } from "@/components/ApiKeyDialog";
 import { InspectorPanel } from "@/components/InspectorPanel";
 import { PromptPanel } from "@/components/PromptPanel";
 import { VoxelCanvas } from "@/components/VoxelCanvas";
-import { exportMcFunction, toMcFunctionFilename } from "@/lib/exporters";
+import { WorldPlanPreview } from "@/components/WorldPlanPreview";
+import { exportMcFunction, toMcFunctionFilename, toSchematicFilename } from "@/lib/exporters";
 import { EXAMPLE_PROMPTS } from "@/lib/structure";
-import type { VoxelStructure } from "@/lib/structure";
+import type { GenerationMetadata, VoxelStructure, WorldPlan, WorldPlanMetadata } from "@/lib/structure";
 import type { BuildingDocument } from "@/lib/structure";
 import { generateStructure } from "@/lib/generator";
 import { applyBuildingOperations } from "@/lib/building-operations";
 import { summarizeStructure } from "@/lib/structure-analysis";
-import { acceptPendingEdit, createBuildingDocument, redoDocument, rejectPendingEdit, setPendingEdit, undoDocument } from "@/lib/building-document";
+import { acceptPendingEdit, createBuildingDocument, redoDocument, rejectPendingEdit, setPendingEdit, setWorldPlan, undoDocument } from "@/lib/building-document";
 
 export function StudioShell() {
   const [prompt, setPrompt] = useState(EXAMPLE_PROMPTS[0]);
@@ -26,6 +27,12 @@ export function StudioShell() {
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generateInfo, setGenerateInfo] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planPreviewOpen, setPlanPreviewOpen] = useState(false);
   const structure = document.structure;
 
   const hasBlocks = structure.blocks.length > 0;
@@ -49,18 +56,52 @@ export function StudioShell() {
     setKeyDialogOpen(false);
   }
 
+  async function handlePlanDistrict(seed?: number) {
+    const command = prompt.trim();
+    if (!command || planLoading) return;
+    setPlanLoading(true);
+    setPlanError(null);
+    try {
+      const response = await fetch("/api/world/plan", { method: "POST", headers: { "Content-Type": "application/json", ...(deepSeekKey ? { "X-DeepSeek-API-Key": deepSeekKey } : {}) }, body: JSON.stringify({ prompt: command, ...(seed === undefined ? {} : { seed }) }) });
+      const payload = await response.json() as { plan?: WorldPlan; metadata?: WorldPlanMetadata; provider?: string; fallback?: boolean; error?: string };
+      if (!response.ok || !payload.plan || !payload.metadata) throw new Error(payload.error || "The planner returned no world plan.");
+      setDocument((current) => setWorldPlan(current, payload.plan!, payload.metadata!));
+      setPlannerLabel(payload.metadata.provider === "deepseek" ? "DeepSeek AI" : "Local planner");
+      setPlanPreviewOpen(true);
+    } catch (error) {
+      setPlanError(error instanceof Error ? error.message : "This district could not be planned.");
+    } finally {
+      setPlanLoading(false);
+    }
+  }
+
   async function handleGenerate(nextPrompt = prompt) {
     const command = nextPrompt.trim();
     if (!command || generateLoading) return;
     setPrompt(command);
     setGenerateLoading(true);
     setGenerateError(null);
+    setGenerateInfo(null);
     try {
       const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", ...(deepSeekKey ? { "X-DeepSeek-API-Key": deepSeekKey } : {}) }, body: JSON.stringify({ prompt: command }) });
-      const payload = await response.json() as { structure?: VoxelStructure; provider?: string; fallback?: boolean; error?: string };
+      const payload = await response.json() as {
+        structure?: VoxelStructure;
+        provider?: string;
+        fallback?: boolean;
+        error?: string;
+        repaired?: boolean;
+        stats?: { operationCount?: number; toolCallCount?: number; blockCount?: number };
+        validation?: { diagnostics?: Array<{ severity?: "error" | "warning" }> };
+        generationMetadata?: GenerationMetadata;
+      };
       if (!response.ok || !payload.structure) throw new Error(payload.error || "The generator returned no structure.");
-      setDocument(createBuildingDocument(payload.structure));
-      setPlannerLabel(payload.provider === "deepseek" ? "DeepSeek AI" : payload.fallback ? "Local fallback" : "Local planner");
+      setDocument(createBuildingDocument(payload.structure, payload.generationMetadata ? { generationMetadata: payload.generationMetadata } : undefined));
+      const isDeepSeek = payload.provider === "deepseek-buildscript";
+      const warningCount = payload.validation?.diagnostics?.filter((diagnostic) => diagnostic.severity === "warning").length ?? 0;
+      setPlannerLabel(isDeepSeek ? "DeepSeek BuildScript" : "Local fallback");
+      setGenerateInfo(isDeepSeek
+        ? `${payload.stats?.operationCount ?? 0} operations · ${payload.structure.blocks.length.toLocaleString()} blocks · validated${payload.repaired ? " · repaired once" : ""}${warningCount ? ` · ${warningCount} warnings` : ""}`
+        : "Generated with the offline local fallback.");
       setEditPrompt("");
       setEditError(null);
     } catch (error) {
@@ -114,23 +155,51 @@ export function StudioShell() {
     setDocument((current) => redoDocument(current));
   }
 
-  function handleExport() {
-    if (!hasBlocks) return;
-    const blob = new Blob([exportMcFunction(structure)], { type: "text/plain;charset=utf-8" });
+  function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement("a");
     anchor.href = url;
-    anchor.download = toMcFunctionFilename(structure.name);
+    anchor.download = filename;
     window.document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
   }
 
+  function handleMcFunctionExport() {
+    if (!hasBlocks) return;
+    const blob = new Blob([exportMcFunction(structure)], { type: "text/plain;charset=utf-8" });
+    downloadBlob(blob, toMcFunctionFilename(structure.name));
+  }
+
+  async function handleSchematicExport() {
+    if (!hasBlocks || exportLoading) return;
+    setExportLoading(true);
+    setExportError(null);
+    try {
+      const response = await fetch("/api/export/schem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ structure, minecraftVersion: "1.20.1" })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || "WorldEdit schematic export failed.");
+      }
+      const disposition = response.headers.get("content-disposition") ?? "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] ?? toSchematicFilename(structure.name);
+      downloadBlob(await response.blob(), filename);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "WorldEdit schematic export failed.");
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-coal text-stone-100">
       <div className="grid min-h-screen grid-cols-1 grid-rows-[auto_1fr_auto] lg:grid-cols-[320px_minmax(0,1fr)_300px] lg:grid-rows-1">
-        <PromptPanel prompt={prompt} onPromptChange={setPrompt} onGenerate={handleGenerate} generateLoading={generateLoading} generateError={generateError} editPrompt={editPrompt} pendingEdit={document.pendingEdit} editError={editError} editDisabled={!hasBlocks} editLoading={editLoading} plannerLabel={plannerLabel} onEditPromptChange={setEditPrompt} onPreviewEdit={handlePreviewEdit} onAcceptEdit={handleAcceptEdit} onRejectEdit={handleRejectEdit} />
+        <PromptPanel prompt={prompt} onPromptChange={(value) => { setPrompt(value); setPlanPreviewOpen(false); }} onGenerate={handleGenerate} generateLoading={generateLoading} generateError={generateError} generateInfo={generateInfo} planLoading={planLoading} planError={planError} editPrompt={editPrompt} pendingEdit={document.pendingEdit} editError={editError} editDisabled={!hasBlocks} editLoading={editLoading} plannerLabel={plannerLabel} onEditPromptChange={setEditPrompt} onPlanDistrict={() => handlePlanDistrict()} onPreviewEdit={handlePreviewEdit} onAcceptEdit={handleAcceptEdit} onRejectEdit={handleRejectEdit} />
 
         <section className="relative min-h-[52vh] border-y border-line bg-[#1d1d1a] lg:min-h-screen lg:border-x lg:border-y-0">
           <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded border border-line bg-coal/80 px-3 py-2 shadow-tool backdrop-blur">
@@ -147,9 +216,9 @@ export function StudioShell() {
             <ToolButton label="Redo" onClick={handleRedo} disabled={Boolean(document.pendingEdit) || !document.future.length}><Redo2 className="h-4 w-4" /></ToolButton>
             <button
               type="button"
-              onClick={handleExport}
-              disabled={!hasBlocks}
-              title="Export mcfunction"
+              onClick={handleSchematicExport}
+              disabled={!hasBlocks || exportLoading}
+              title="Export WorldEdit schematic"
               className="inline-flex h-9 w-9 items-center justify-center rounded border border-line bg-panel text-stone-100 transition hover:bg-panelSoft disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download className="h-4 w-4" aria-hidden />
@@ -168,6 +237,8 @@ export function StudioShell() {
 
           <VoxelCanvas structure={structure} pendingEdit={document.pendingEdit} />
 
+          {planPreviewOpen && document.worldPlan && <WorldPlanPreview plan={document.worldPlan} metadata={document.worldPlanMetadata} loading={planLoading} onRegenerate={() => handlePlanDistrict(((document.worldPlanMetadata?.seed ?? 0) + 1) >>> 0)} onClose={() => setPlanPreviewOpen(false)} />}
+
           {document.pendingEdit && (
             <div className="absolute bottom-3 left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded border border-line bg-coal/90 p-2 shadow-tool backdrop-blur">
               <span className="hidden max-w-[260px] truncate px-1 text-xs text-stone-300 sm:block">{document.pendingEdit.prompt}</span>
@@ -178,7 +249,7 @@ export function StudioShell() {
           )}
         </section>
 
-        <InspectorPanel structure={structure} history={document.history} futureCount={document.future.length} onExport={handleExport} onClear={handleClear} />
+        <InspectorPanel structure={structure} history={document.history} futureCount={document.future.length} onExportSchem={handleSchematicExport} onExportMcFunction={handleMcFunctionExport} exportLoading={exportLoading} exportError={exportError} onClear={handleClear} />
       </div>
       <ApiKeyDialog open={keyDialogOpen} initialValue={deepSeekKey} onSave={saveDeepSeekKey} onClose={() => setKeyDialogOpen(false)} />
     </main>

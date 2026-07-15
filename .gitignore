@@ -11,4 +11,6 @@ pnpm-debug.log*
 .DS_Store
 .test-build/
 .pnpm-store/
+.venv/
+services/schematic-exporter/.venv/
 *.tsbuildinfo

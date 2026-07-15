@@ -1,20 +1,23 @@
 "use client";
 
 import { Download, Eraser } from "lucide-react";
-import { BLOCK_COLORS, BLOCK_LABELS, getUsedBlockTypes } from "@/lib/structure";
+import { getBlockColor, getBlockLabel, getUsedBlockTypes } from "@/lib/structure";
 import type { VoxelStructure } from "@/lib/structure";
 import type { EditTransaction } from "@/lib/structure";
 import { analyzeStructureQuality } from "@/lib/structure-analysis";
 
 type InspectorPanelProps = {
   structure: VoxelStructure;
-  onExport: () => void;
+  onExportSchem: () => void;
+  onExportMcFunction: () => void;
+  exportLoading?: boolean;
+  exportError?: string | null;
   onClear: () => void;
   history: EditTransaction[];
   futureCount: number;
 };
 
-export function InspectorPanel({ structure, history, futureCount, onExport, onClear }: InspectorPanelProps) {
+export function InspectorPanel({ structure, history, futureCount, onExportSchem, onExportMcFunction, exportLoading = false, exportError, onClear }: InspectorPanelProps) {
   const usedBlocks = getUsedBlockTypes(structure);
   const hasBlocks = structure.blocks.length > 0;
   const quality = analyzeStructureQuality(structure);
@@ -56,11 +59,11 @@ export function InspectorPanel({ structure, history, futureCount, onExport, onCl
               <div key={id} className="flex items-center gap-3 rounded border border-line bg-coal px-3 py-2">
                 <span
                   className="h-5 w-5 shrink-0 rounded-sm border border-black/40"
-                  style={{ backgroundColor: BLOCK_COLORS[id] }}
+                  style={{ backgroundColor: getBlockColor(id) }}
                   aria-hidden
                 />
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-stone-100">{BLOCK_LABELS[id]}</p>
+                  <p className="truncate text-sm text-stone-100">{getBlockLabel(id)}</p>
                   <p className="truncate text-xs text-stone-500">{id}</p>
                 </div>
               </div>
@@ -85,15 +88,22 @@ export function InspectorPanel({ structure, history, futureCount, onExport, onCl
       </section>
 
       <div className="grid grid-cols-2 gap-2 border-t border-line pt-3">
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={!hasBlocks}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded border border-[#8a7140] bg-sand px-3 text-sm font-semibold text-[#252016] transition hover:bg-[#dfc17b] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          Export
-        </button>
+        <details className="group relative">
+          <summary className={`inline-flex h-10 w-full list-none items-center justify-center gap-2 rounded border border-[#8a7140] bg-sand px-3 text-sm font-semibold text-[#252016] transition hover:bg-[#dfc17b] [&::-webkit-details-marker]:hidden ${!hasBlocks || exportLoading ? "pointer-events-none opacity-40" : "cursor-pointer"}`}>
+            <Download className="h-4 w-4" aria-hidden />
+            {exportLoading ? "Exporting…" : "Export"}
+          </summary>
+          <div className="absolute bottom-12 left-0 z-20 w-56 overflow-hidden rounded border border-line bg-coal p-1 shadow-tool">
+            <button type="button" onClick={onExportSchem} className="w-full rounded px-3 py-2 text-left text-xs text-stone-100 hover:bg-panelSoft">
+              <span className="block font-semibold">WorldEdit Schematic</span>
+              <span className="text-stone-500">.schem · Java 1.20.1</span>
+            </button>
+            <button type="button" onClick={onExportMcFunction} className="w-full rounded px-3 py-2 text-left text-xs text-stone-100 hover:bg-panelSoft">
+              <span className="block font-semibold">Minecraft Function</span>
+              <span className="text-stone-500">.mcfunction</span>
+            </button>
+          </div>
+        </details>
         <button
           type="button"
           onClick={onClear}
@@ -103,6 +113,7 @@ export function InspectorPanel({ structure, history, futureCount, onExport, onCl
           Clear
         </button>
       </div>
+      {exportError && <p role="alert" className="-mt-2 text-xs leading-5 text-[#ef9a8f]">{exportError}</p>}
     </aside>
   );
 }
