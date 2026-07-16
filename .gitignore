@@ -13,4 +13,6 @@ pnpm-debug.log*
 .pnpm-store/
 .venv/
 services/schematic-exporter/.venv/
+services/minecraft-assets/.cache/
+public/minecraft/
 *.tsbuildinfo

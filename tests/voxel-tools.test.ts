@@ -22,7 +22,7 @@ test("a deterministic multi-tool plan produces one invertible patch", () => {
 });
 
 test("fill collision modes report skipped and replaced blocks", () => {
-  const base = executeVoxelTools(empty, [{ type: "fill", from: [1, 0, 1], to: [1, 0, 1], material: "minecraft:brick" }]).structure;
+  const base = executeVoxelTools(empty, [{ type: "fill", from: [1, 0, 1], to: [1, 0, 1], material: "minecraft:bricks" }]).structure;
   const skipped = executeVoxelTools(base, [
     { type: "fill", from: [1, 0, 1], to: [2, 0, 1], material: "minecraft:sandstone", mode: "empty" }
   ]);
@@ -31,13 +31,27 @@ test("fill collision modes report skipped and replaced blocks", () => {
   assert.equal(overwritten.reports[0].replaced, 1);
 });
 
+test("the 128-cubed scene allows plans that revisit more than the legacy coordinate budget", () => {
+  const calls: VoxelToolCall[] = Array.from({ length: 11 }, () => ({
+    type: "fill",
+    from: [0, 0, 0],
+    to: [49, 19, 9],
+    material: "minecraft:bricks",
+    ownerId: "large-volume"
+  }));
+  const result = executeVoxelTools(empty, calls);
+  assert.equal(result.reports.reduce((total, report) => total + report.visited, 0), 110_000);
+  assert.equal(result.structure.blocks.length, 10_000);
+});
+
 test("scene, selection, and locked-region violations reject atomically", () => {
-  const original: VoxelStructure = { name: "locked", size: [1, 1, 1], blocks: [{ x: 5, y: 0, z: 5, id: "minecraft:brick", ownerId: "tower" }] };
+  const original: VoxelStructure = { name: "locked", size: [1, 1, 1], blocks: [{ x: 5, y: 0, z: 5, id: "minecraft:bricks", ownerId: "tower" }] };
   const snapshot = structuredClone(original);
   const locked: SemanticRegion[] = [{ id: "tower", locked: true, bounds: { minX: 4, minY: 0, minZ: 4, maxX: 6, maxY: 10, maxZ: 6 } }];
+  assert.doesNotThrow(() => executeVoxelTools(original, [{ type: "fill", from: [127, 127, 127], to: [127, 127, 127], material: "minecraft:bricks" }]));
   assert.throws(() => executeVoxelTools(original, [{ type: "remove", from: [5, 0, 5], to: [5, 0, 5] }], { regions: locked }), /locked coordinate/);
-  assert.throws(() => executeVoxelTools(original, [{ type: "fill", from: [63, 0, 63], to: [64, 0, 63], material: "minecraft:brick" }]), /outside/);
-  assert.throws(() => executeVoxelTools(original, [{ type: "fill", from: [3, 0, 3], to: [4, 0, 3], material: "minecraft:brick" }], { writableBounds: { minX: 0, minY: 0, minZ: 0, maxX: 3, maxY: 3, maxZ: 3 } }), /selection/);
+  assert.throws(() => executeVoxelTools(original, [{ type: "fill", from: [127, 0, 127], to: [128, 0, 127], material: "minecraft:bricks" }]), /outside/);
+  assert.throws(() => executeVoxelTools(original, [{ type: "fill", from: [3, 0, 3], to: [4, 0, 3], material: "minecraft:bricks" }], { writableBounds: { minX: 0, minY: 0, minZ: 0, maxX: 3, maxY: 3, maxZ: 3 } }), /selection/);
   assert.deepEqual(original, snapshot);
 });
 
@@ -50,14 +64,14 @@ test("copy and mirror use a source snapshot without cascading", () => {
 });
 
 test("budgets and runtime schemas reject unsafe plans", () => {
-  assert.throws(() => executeVoxelTools(empty, [{ type: "fill", from: [0, 0, 0], to: [2, 0, 0], material: "minecraft:brick" }], { budgets: { maxCoordinates: 2 } }), /coordinate budget/);
+  assert.throws(() => executeVoxelTools(empty, [{ type: "fill", from: [0, 0, 0], to: [2, 0, 0], material: "minecraft:bricks" }], { budgets: { maxCoordinates: 2 } }), /coordinate budget/);
   assert.throws(() => executeVoxelTools(empty, [
-    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:brick" },
-    { type: "fill", from: [1, 0, 0], to: [1, 0, 0], material: "minecraft:brick" }
+    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:bricks" },
+    { type: "fill", from: [1, 0, 0], to: [1, 0, 0], material: "minecraft:bricks" }
   ], { budgets: { maxCalls: 1 } }), /call budget/);
-  assert.throws(() => executeVoxelTools(empty, [{ type: "fill", from: [0, 0, 0], to: [2, 0, 0], material: "minecraft:brick" }], { budgets: { maxChangedBlocks: 2 } }), /unique changed-block budget/);
+  assert.throws(() => executeVoxelTools(empty, [{ type: "fill", from: [0, 0, 0], to: [2, 0, 0], material: "minecraft:bricks" }], { budgets: { maxChangedBlocks: 2 } }), /unique changed-block budget/);
   const repeatedlyChanged = executeVoxelTools(empty, [
-    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:brick" },
+    { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:bricks" },
     { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:sandstone" },
     { type: "fill", from: [0, 0, 0], to: [0, 0, 0], material: "minecraft:stone_bricks" }
   ], { budgets: { maxChangedBlocks: 1 } });

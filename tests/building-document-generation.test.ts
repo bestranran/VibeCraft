@@ -58,7 +58,7 @@ test("generated BuildScript metadata is deeply stored with a fresh project docum
   assert.equal(document.pendingEdit, null);
 
   metadata.validationWarnings.push("external mutation");
-  if (metadata.buildScript) metadata.buildScript.palette.wall = "minecraft:brick";
+  if (metadata.buildScript) metadata.buildScript.palette.wall = "minecraft:bricks";
   assert.equal(document.generationMetadata?.validationWarnings.includes("external mutation"), false);
   assert.equal(document.generationMetadata?.buildScript?.palette.wall, "minecraft:oak_planks");
 });
@@ -103,7 +103,7 @@ test("generation and edit failures leave the current document byte-for-byte unch
 
   assert.throws(() => compileBuildScript({
     ...compilation.script,
-    operations: [{ type: "hollowBox", id: "outside", origin: [63, 1, 63], size: [8, 8, 8], wall: "wall" }]
+    operations: [{ type: "hollowBox", id: "outside", origin: [127, 1, 127], size: [8, 8, 8], wall: "wall" }]
   }), /outside/);
   assert.throws(() => parseEditCommand("make the building sing a song", current.structure), /could not map|couldn't (?:map|understand)/i);
   assert.deepEqual(current, snapshot);

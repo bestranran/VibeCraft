@@ -93,7 +93,7 @@ function addChimney(map: BlockMap, structure: VoxelStructure, side: "left" | "ri
   const anchor = roofNearSide.sort((a, b) => b.y - a.y)[0] ?? roof.sort((a, b) => b.y - a.y)[0];
   const top = Math.min(MAX_COORDINATE, Math.max(bounds.maxY + 2, anchor.y + 3));
   for (let y = Math.max(bounds.minY + 2, anchor.y - 1); y <= top; y += 1) {
-    setBlock(map, { x: anchor.x, y, z: anchor.z, id: y === top ? "minecraft:cobblestone" : "minecraft:brick" });
+    setBlock(map, { x: anchor.x, y, z: anchor.z, id: y === top ? "minecraft:cobblestone" : "minecraft:bricks" });
   }
 }
 
@@ -153,7 +153,7 @@ function removeFeature(map: BlockMap, structure: VoxelStructure, feature: "chimn
   }
   const roof = getRoofBlocks(structure);
   const roofMinY = roof.length ? Math.min(...roof.map((block) => block.y)) : bounds.maxY;
-  structure.blocks.filter((block) => (block.id === "minecraft:brick" || block.id === "minecraft:cobblestone") && block.y >= roofMinY - 1).forEach((block) => map.delete(coordinateKey(block)));
+  structure.blocks.filter((block) => (block.id === "minecraft:bricks" || block.id === "minecraft:cobblestone") && block.y >= roofMinY - 1).forEach((block) => map.delete(coordinateKey(block)));
 }
 
 export function applyBuildingOperations(structure: VoxelStructure, operations: BuildingOperation[]): { structure: VoxelStructure; patch: StructurePatch } {

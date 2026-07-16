@@ -21,7 +21,7 @@ test("agent assessment recognizes one connected hollow shell", () => {
 
 test("agent assessment flags disconnected and overly solid geometry", () => {
   const blocks: VoxelBlock[] = [];
-  for (let x=0;x<4;x+=1) for(let y=0;y<4;y+=1) for(let z=0;z<4;z+=1) blocks.push({ x,y,z,id:"minecraft:brick" });
+  for (let x=0;x<4;x+=1) for(let y=0;y<4;y+=1) for(let z=0;z<4;z+=1) blocks.push({ x,y,z,id:"minecraft:bricks" });
   blocks.push({ x: 10, y: 10, z: 10, id: "minecraft:cobblestone" });
   const result = assessAgentBuild(structure(blocks));
   assert.ok(result.warnings.some((warning) => warning.includes("disconnected")));

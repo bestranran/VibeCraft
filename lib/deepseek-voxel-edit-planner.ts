@@ -1,6 +1,8 @@
 import { validateVoxelToolCalls } from "./voxel-tools";
 import type { VoxelToolCall } from "./structure";
 import type { VoxelEditContext } from "./voxel-edit-context";
+import { aiProviderLabel, requestAiText } from "./ai-provider";
+import type { AiApiMode, AiProvider } from "./ai-provider";
 
 const SYSTEM_PROMPT = `You are the conversational voxel-edit planner for VibeCraft Studio.
 Turn the user's exact Chinese or English instruction into the smallest safe set of voxel tool calls. The current structure may be a robot, fountain, building, sculpture, or any other subject. Never impose building semantics and never regenerate the whole scene.
@@ -11,14 +13,14 @@ Return JSON only in this exact top-level shape:
 affectedOwnerIds is a safety declaration. List every EXISTING component whose blocks may be removed, replaced, or overwritten. Reading a component as a copy/mirror source does not modify it. New geometry should receive a specific ownerId, normally the target component's ownerId. Use "__unowned__" for existing blocks without an owner. Do not list unrelated components.
 
 Allowed calls:
-- {"type":"fill","from":[x,y,z],"to":[x,y,z],"material":"minecraft:block_id","ownerId":"id","mode":"overwrite|empty"}
+- {"type":"fill","from":[x,y,z],"to":[x,y,z],"material":"minecraft:stone","ownerId":"id","mode":"overwrite|empty"}
 - {"type":"remove","from":[x,y,z],"to":[x,y,z]}
-- {"type":"replace","from":[x,y,z],"to":[x,y,z],"fromMaterial":"minecraft:block_id","toMaterial":"minecraft:block_id","ownerId":"id"}
-- {"type":"line","from":[x,y,z],"to":[x,y,z],"material":"minecraft:block_id","ownerId":"id","mode":"overwrite|empty"}
+- {"type":"replace","from":[x,y,z],"to":[x,y,z],"fromMaterial":"minecraft:stone","toMaterial":"minecraft:red_concrete","ownerId":"id"}
+- {"type":"line","from":[x,y,z],"to":[x,y,z],"material":"minecraft:oak_planks","ownerId":"id","mode":"overwrite|empty"}
 - {"type":"copy","source":{"minX":n,"minY":n,"minZ":n,"maxX":n,"maxY":n,"maxZ":n},"offset":[dx,dy,dz],"ownerId":"id","mode":"overwrite|empty"}
 - {"type":"mirror","source":{"minX":n,"minY":n,"minZ":n,"maxX":n,"maxY":n,"maxZ":n},"axis":"x|z","pivot":n,"ownerId":"id","mode":"overwrite|empty"}
 
-All numbers are integers. All destination coordinates must stay within x/z 0..63 and y 0..63 and within writableBounds when supplied. Locked regions are read-only. Use at most 16 calls and avoid visiting broad empty volumes. Prefer replace for material changes, remove for deletion, copy/mirror for duplication, and compact fill/line calls for geometry. Preserve unrelated owner groups and unchanged materials. Return at least one call that makes a real change.`;
+Material values in the schemas are examples. Choose any real Minecraft Java 1.20.1 block ID that matches the user's request; never output the literal placeholder minecraft:block_id. All numbers are integers. All destination coordinates must stay within x/z 0..127 and y 0..127 and within writableBounds when supplied. Locked regions are read-only. Use at most 16 calls and avoid visiting broad empty volumes. Prefer replace for material changes, remove for deletion, copy/mirror for duplication, and compact fill/line calls for geometry. Preserve unrelated owner groups and unchanged materials. Return at least one call that makes a real change.`;
 
 export type VoxelEditPlan = {
   summary: string;
@@ -29,13 +31,13 @@ export type VoxelEditPlan = {
 
 export class VoxelEditPlanningError extends Error {}
 
-type ChatResponse = { choices?: Array<{ message?: { content?: string } }> };
-
 export class DeepSeekVoxelEditPlanner {
   constructor(
     private readonly apiKey: string,
     private readonly model = process.env.DEEPSEEK_MODEL || "deepseek-chat",
-    private readonly baseUrl = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
+    private readonly baseUrl = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    private readonly provider: AiProvider = "deepseek",
+    private readonly apiMode?: AiApiMode
   ) {}
 
   async planEdit(command: string, context: VoxelEditContext): Promise<VoxelEditPlan> {
@@ -60,33 +62,41 @@ export class DeepSeekVoxelEditPlanner {
       try {
         return { ...parseVoxelEditPlan(repairedContent, context), repaired: true };
       } catch (repairError) {
-        throw new VoxelEditPlanningError(`DeepSeek returned an invalid voxel edit after one repair attempt: ${repairError instanceof Error ? repairError.message : "invalid format"}`);
+        throw new VoxelEditPlanningError(`${aiProviderLabel(this.provider)} returned an invalid voxel edit after one repair attempt: ${repairError instanceof Error ? repairError.message : "invalid format"}`);
       }
     }
   }
 
   private async chat(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, temperature: number) {
-    const response = await fetch(`${this.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
+    try {
+      return await requestAiText({
+        provider: this.provider,
+        apiKey: this.apiKey,
         model: this.model,
+        baseUrl: this.baseUrl,
+        ...(this.apiMode ? { apiMode: this.apiMode } : {}),
         temperature,
-        max_tokens: 4096,
-        response_format: { type: "json_object" },
+        maxTokens: 4096,
+        timeoutMs: 120_000,
         messages
-      }),
-      signal: AbortSignal.timeout(30_000)
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new VoxelEditPlanningError(`DeepSeek edit request failed (${response.status}): ${detail.slice(0, 240)}`);
+      });
+    } catch (error) {
+      throw new VoxelEditPlanningError(error instanceof Error ? error.message : `${aiProviderLabel(this.provider)} edit request failed.`);
     }
-    const data = await response.json() as ChatResponse;
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new VoxelEditPlanningError("DeepSeek returned an empty voxel edit plan.");
-    return content;
   }
+}
+
+export function createAiVoxelEditPlanner(provider: AiProvider, apiKey: string, options: { baseUrl?: string; apiMode?: AiApiMode; model?: string } = {}) {
+  if (provider === "claude") {
+    return new DeepSeekVoxelEditPlanner(
+      apiKey,
+      options.model || process.env.ANTHROPIC_MODEL || "claude-opus-4-8",
+      options.baseUrl || process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com",
+      "claude",
+      options.apiMode
+    );
+  }
+  return new DeepSeekVoxelEditPlanner(apiKey);
 }
 
 export function parseVoxelEditPlan(content: string, context: VoxelEditContext): Omit<VoxelEditPlan, "repaired"> {

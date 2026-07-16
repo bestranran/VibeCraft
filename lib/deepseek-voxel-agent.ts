@@ -1,9 +1,9 @@
 import { analyzeStructureQuality } from "./structure-analysis";
-import { BLOCK_IDS, isBlockId } from "./structure";
+import { MAX_STRUCTURE_BLOCKS, MAX_VISITED_COORDINATES, RECOMMENDED_BLOCK_IDS, SCENE_SIZE, isBlockId } from "./structure";
 import type { BlockId, VoxelStructure, VoxelToolCall } from "./structure";
 import { executeVoxelTools, validateVoxelToolCalls } from "./voxel-tools";
 
-const MATERIALS = BLOCK_IDS;
+const MATERIALS = RECOMMENDED_BLOCK_IDS;
 
 export type VoxelAgentResult = {
   structure: VoxelStructure;
@@ -22,7 +22,7 @@ export type AgentBuildAssessment = {
 
 const BLUEPRINT_PROMPT = `You are the lead architect for a Minecraft voxel build. Produce a compact construction blueprint, not block operations.
 Return JSON only with: name, summary, footprint {minX,maxX,minZ,maxZ}, baseY, wallTopY, roofTopY, entrance {side,center,width,height}, palette {foundation,walls,roof,accent,glass}, majorVolumes, roofGeometry, and details.
-Use x/z 4..59 and y 0..63, center near 32,32, and keep the footprint within about 48x48. Specify exact integer coordinates and a coherent asymmetrical silhouette. The interior must be hollow and the entrance traversable. Keep the response under 900 words.
+Use x/z 8..119 and y 0..127, center near 64,64, and keep the footprint within about 96x96. Specify exact integer coordinates and a coherent asymmetrical silhouette. The interior must be hollow and the entrance traversable. Keep the response under 900 words.
 Allowed materials: ${MATERIALS.join(", ")}.`;
 
 const STAGE_RULES = `You are a Minecraft voxel CAD construction agent. Return JSON only: {"summary":"stage summary","toolCalls":[...]}. Return only NEW calls for this stage.
@@ -31,8 +31,8 @@ Use the compact array DSL below. Never return verbose tool objects and never rep
 - ["D",x1,y1,z1,x2,y2,z2] remove
 - ["L",x1,y1,z1,x2,y2,z2,"material","owner"] line
 - ["X",x1,y1,z1,x2,y2,z2,"fromMaterial","toMaterial","owner"] replace
-Example: {"summary":"four hollow walls","toolCalls":[["F",12,1,12,40,8,12,"minecraft:brick","wall-north"],["D",25,1,12,27,3,12]]}
-All coordinates must remain x/z 0..63 and y 0..63. Follow the supplied blueprint exactly. Prefer large planes and lines; never output individual setblock commands. Do not create a solid building. Features must be face-connected or physically supported.
+Example: {"summary":"four hollow walls","toolCalls":[["F",12,1,12,40,8,12,"minecraft:bricks","wall-north"],["D",25,1,12,27,3,12]]}
+All coordinates must remain x/z 0..127 and y 0..127. Follow the supplied blueprint exactly. Prefer large planes and lines; never output individual setblock commands. Do not create a solid building. Features must be face-connected or physically supported.
 Allowed materials: ${MATERIALS.join(", ")}.`;
 
 const STAGES = [
@@ -101,7 +101,7 @@ export function normalizeAgentMaterial(value: unknown): BlockId {
   if (/(oak|wood|plank)/.test(name)) return "minecraft:oak_planks";
   if (/(red_sand|terracotta)/.test(name)) return "minecraft:red_sandstone";
   if (/sand/.test(name)) return "minecraft:sandstone";
-  if (/(brick|nether)/.test(name)) return "minecraft:brick";
+  if (/(brick|nether)/.test(name)) return "minecraft:bricks";
   if (/(stone|cobble)/.test(name)) return "minecraft:stone_bricks";
   if (isBlockId(normalized)) return normalized;
   throw new Error(`Unsupported agent material: ${value}.`);
@@ -177,7 +177,10 @@ export function assessAgentBuild(structure: VoxelStructure): AgentBuildAssessmen
 }
 
 function execute(structure: VoxelStructure, calls: VoxelToolCall[]) {
-  return executeVoxelTools(structure, calls, { bounds: { width: 64, depth: 64, maxHeight: 64 }, budgets: { maxCalls: 120, maxCoordinates: 500_000, maxChangedBlocks: 100_000 } });
+  return executeVoxelTools(structure, calls, {
+    bounds: { width: SCENE_SIZE, depth: SCENE_SIZE, maxHeight: SCENE_SIZE },
+    budgets: { maxCalls: 120, maxCoordinates: MAX_VISITED_COORDINATES, maxChangedBlocks: MAX_STRUCTURE_BLOCKS }
+  });
 }
 
 function empty(name: string): VoxelStructure { return { name, size: [0, 0, 0], blocks: [] }; }

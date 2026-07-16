@@ -34,7 +34,7 @@ test("component edit context summarizes owner bounds, materials, metadata, and l
     buildScript: {
       version: 1,
       name: "robot",
-      bounds: { width: 64, depth: 64, maxHeight: 64 },
+      bounds: { width: 128, depth: 128, maxHeight: 128 },
       palette: { metal: "minecraft:iron_block" },
       operations: [{ type: "foundation", id: "torso", origin: [20, 4, 20], size: [3, 1, 3], material: "minecraft:iron_block" }]
     }
@@ -103,7 +103,7 @@ test("fountain edits change only basin and water without inventing building part
 test("building chimney removal and tower copy are bounded component edits", () => {
   const building = fixture("castle", [
     ...fillBlocks("main-building", [20, 0, 20], [30, 5, 30], "minecraft:stone_bricks"),
-    ...fillBlocks("chimney", [27, 6, 25], [27, 10, 25], "minecraft:brick"),
+    ...fillBlocks("chimney", [27, 6, 25], [27, 10, 25], "minecraft:bricks"),
     ...fillBlocks("right-tower", [34, 0, 22], [36, 7, 24], "minecraft:polished_deepslate")
   ]);
   const mainBefore = building.blocks.filter((block) => block.ownerId === "main-building");

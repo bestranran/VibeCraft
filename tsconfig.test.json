@@ -11,6 +11,6 @@
     "noEmit": false,
     "incremental": false
   },
-  "include": ["lib/**/*.ts", "tests/**/*.ts"],
+  "include": ["lib/**/*.ts", "i18n/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules"]
 }

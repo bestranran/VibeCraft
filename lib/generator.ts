@@ -100,7 +100,7 @@ function addMedievalCottage(): VoxelStructure {
     b.set(x, 8, 0, "minecraft:spruce_planks");
   }
 
-  fill(b, [3, 5, 1], [3, 8, 1], "minecraft:brick");
+  fill(b, [3, 5, 1], [3, 8, 1], "minecraft:bricks");
   b.set(3, 9, 1, "minecraft:cobblestone");
 
   return { name: "medieval-cottage", size: [11, 10, 9], blocks: b.blocks() };
@@ -228,7 +228,7 @@ export function placeStructureInScene(structure: VoxelStructure): VoxelStructure
   const maxY = Math.max(...structure.blocks.map((block) => block.y));
   const minZ = Math.min(...structure.blocks.map((block) => block.z));
   const maxZ = Math.max(...structure.blocks.map((block) => block.z));
-  if (maxX - minX >= 64 || maxY - minY >= 64 || maxZ - minZ >= 64) throw new Error("The local fixture does not fit inside the 64×64×64 scene.");
+  if (maxX - minX >= 128 || maxY - minY >= 128 || maxZ - minZ >= 128) throw new Error("The local fixture does not fit inside the 128×128×128 scene.");
   const offsetX = Math.floor((63 - (maxX - minX)) / 2) - minX;
   const offsetY = minY < 0 ? -minY : 0;
   const offsetZ = Math.floor((63 - (maxZ - minZ)) / 2) - minZ;

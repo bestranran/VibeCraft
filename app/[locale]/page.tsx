@@ -1,5 +1,5 @@
 import { StudioShell } from "@/components/StudioShell";
 
-export default function Home() {
+export default function LocalizedHome() {
   return <StudioShell />;
 }

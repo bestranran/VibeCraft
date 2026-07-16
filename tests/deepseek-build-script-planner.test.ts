@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BUILD_SCRIPT_SYSTEM_PROMPT,
   createDeepSeekBuildScriptChat,
   DeepSeekBuildScriptError,
   DeepSeekBuildScriptResponseError,
   generateWithDeepSeekBuildScript
 } from "../lib/deepseek-build-script-planner";
 import type { DeepSeekBuildScriptChat } from "../lib/deepseek-build-script-planner";
+import { MINECRAFT_BLOCK_IDS } from "../lib/minecraft-block-registry-1.20.1";
 
 function validScript(name = "provider-cottage") {
   return {
@@ -27,6 +29,12 @@ function validScript(name = "provider-cottage") {
   };
 }
 
+test("the generation prompt receives the complete Java 1.20.1 block registry", () => {
+  assert.match(BUILD_SCRIPT_SYSTEM_PROMPT, new RegExp(`Available material IDs \\(${MINECRAFT_BLOCK_IDS.length} total\\)`));
+  for (const id of MINECRAFT_BLOCK_IDS) assert.ok(BUILD_SCRIPT_SYSTEM_PROMPT.includes(id), id);
+  assert.match(BUILD_SCRIPT_SYSTEM_PROMPT, /there is no required minimum or maximum palette size/);
+});
+
 test("a valid first DeepSeek BuildScript compiles without a repair call", async () => {
   let calls = 0;
   const chat: DeepSeekBuildScriptChat = async () => {
@@ -37,6 +45,7 @@ test("a valid first DeepSeek BuildScript compiles without a repair call", async 
   assert.equal(calls, 1);
   assert.equal(result.attempts, 1);
   assert.equal(result.repaired, false);
+  assert.deepEqual(result.script.bounds, { width: 128, depth: 128, maxHeight: 128 });
   assert.equal(result.validation.valid, true);
   assert.equal(result.stats.operationCount, 4);
   assert.ok(result.structure.blocks.length > 100);
@@ -89,6 +98,31 @@ test("fractional hollowBox dimensions are normalized without adding building sem
   const normalizedBox = result.script.operations.find((operation) => operation.type === "hollowBox");
   assert.equal(normalizedBox?.type === "hollowBox" ? normalizedBox.size[1] : undefined, 2);
   assert.equal(result.script.operations.some((operation) => operation.type === "entrance"), false);
+});
+
+test("out-of-range operation numbers are deterministically clamped after repair", async () => {
+  const invalid = validScript("oversized-porch");
+  const house = invalid.operations.find((operation) => operation.type === "hollowBox")!;
+  Object.assign(house, { size: [40, 8, 14] });
+  invalid.operations.push({
+    type: "porch",
+    id: "wide-porch",
+    target: "house",
+    side: "front",
+    width: 19.6,
+    depth: 2,
+    material: "base",
+  } as unknown as (typeof invalid.operations)[number]);
+  let calls = 0;
+  const chat: DeepSeekBuildScriptChat = async () => {
+    calls += 1;
+    return invalid;
+  };
+  const result = await generateWithDeepSeekBuildScript("a cottage with a wide porch", "test-key", { chat });
+  assert.equal(calls, 2);
+  assert.equal(result.repaired, true);
+  const porch = result.script.operations.find((operation) => operation.id === "wide-porch");
+  assert.equal(porch?.type === "porch" ? porch.width : undefined, 20);
 });
 
 test("the literal palette placeholder is removed after the bounded repair", async () => {

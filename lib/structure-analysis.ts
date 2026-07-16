@@ -89,7 +89,7 @@ export function hasFeature(structure: VoxelStructure, feature: "chimney" | "path
   if (feature === "windows") return structure.blocks.some((block) => block.id === "minecraft:glass_pane");
   if (feature === "path") return structure.blocks.some((block) => block.y <= bounds.minY && block.z < facades.front);
   const roofKeys = new Set(getRoofBlocks(structure).map(coordinateKey));
-  return structure.blocks.some((block) => block.id === "minecraft:brick" && block.y >= bounds.minY + 3 && !roofKeys.has(coordinateKey(block)));
+  return structure.blocks.some((block) => block.id === "minecraft:bricks" && block.y >= bounds.minY + 3 && !roofKeys.has(coordinateKey(block)));
 }
 
 export function summarizeStructure(structure: VoxelStructure) {

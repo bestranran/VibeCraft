@@ -85,7 +85,7 @@ function fixture(config: FixtureConfig): MvpEvaluationCase {
     script: {
       version: 1,
       name: `${config.style}-evaluation-build`,
-      bounds: { width: 64, depth: 64, maxHeight: 64 },
+      bounds: { width: 128, depth: 128, maxHeight: 128 },
       palette: { base: config.base, wall: config.wall, roof: config.roof, glass: "minecraft:glass_pane" },
       operations
     },

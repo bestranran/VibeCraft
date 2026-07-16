@@ -1,4 +1,4 @@
-import { BLOCK_IDS, isBlockId } from "./structure";
+import { isBlockId } from "./structure";
 import type { BuildingOperation } from "./structure";
 
 const SIDES = ["front", "back", "left", "right", "all"] as const;
@@ -33,7 +33,7 @@ export function validateBuildingOperations(value: unknown): BuildingOperation[] 
       case "addWindows": return { type: raw.type, side: member(raw.side, SIDES, "side"), count: integer(raw.count, 1, 12, "count") };
       case "addChimney": return { type: raw.type, side: member(raw.side, ["left", "right"] as const, "side") };
       case "addPath": {
-        if (typeof raw.material !== "string" || !isBlockId(raw.material)) throw new Error(`material must be one of: ${BLOCK_IDS.join(", ")}.`);
+        if (typeof raw.material !== "string" || !isBlockId(raw.material)) throw new Error("material must be a Minecraft Java 1.20.1 block ID.");
         return { type: raw.type, length: integer(raw.length, 1, 24, "length"), width: integer(raw.width, 1, 5, "width"), material: raw.material };
       }
       case "changePalette": {

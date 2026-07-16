@@ -12,13 +12,13 @@ function overlaps(a: Box2D, b: Box2D) {
 
 test("local planning creates the milestone district layout", () => {
   const plan = createLocalWorldPlan(prompt);
-  assert.deepEqual(plan.bounds, { width: 64, depth: 64, maxHeight: 64 });
+  assert.deepEqual(plan.bounds, { width: 128, depth: 128, maxHeight: 128 });
   assert.equal(plan.roads.length, 1);
   assert.equal(plan.lots.length, 6);
   assert.equal(plan.landmarks.length, 1);
   assert.equal(plan.connections.filter((connection) => connection.kind === "bridge").length, 2);
   const road = plan.roads[0].bounds;
-  assert.ok((road.minX === 0 && road.maxX === 63) || (road.minZ === 0 && road.maxZ === 63));
+  assert.ok((road.minX === 0 && road.maxX === 127) || (road.minZ === 0 && road.maxZ === 127));
   for (let index = 0; index < plan.lots.length; index += 1) {
     const lot = plan.lots[index];
     assert.ok(!overlaps(lot.bounds, road));
@@ -51,7 +51,7 @@ test("world-plan validation rejects overlapping lots and disconnected roads", ()
 test("DeepSeek preferences are bounded before deterministic compilation", () => {
   const invalid = {
     name: "unsafe", themeName: "cyberpunk", palette: ["minecraft:stone_bricks", "minecraft:lantern"], roadOrientation: "north-south", roadWidth: 20,
-    lots: Array.from({ length: 6 }, () => ({ purpose: "commercial", height: 20, roof: "flat", wallMaterial: "minecraft:brick", roofMaterial: "minecraft:stone_bricks" })), landmarkLot: 0, bridgeRows: [0, 2]
+    lots: Array.from({ length: 6 }, () => ({ purpose: "commercial", height: 20, roof: "flat", wallMaterial: "minecraft:bricks", roofMaterial: "minecraft:stone_bricks" })), landmarkLot: 0, bridgeRows: [0, 2]
   };
   assert.throws(() => validateWorldPlanPreferences(invalid), /road width/);
 });

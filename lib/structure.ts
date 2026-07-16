@@ -1,6 +1,13 @@
 import type { BuildScript } from "./build-script";
+import { MINECRAFT_BLOCK_IDS } from "./minecraft-block-registry-1.20.1";
+import type { MinecraftBlockId } from "./minecraft-block-registry-1.20.1";
 
-export type BlockId = `minecraft:${string}`;
+export type BlockId = MinecraftBlockId;
+
+export const SCENE_SIZE = 128 as const;
+export const SCENE_MAX_COORDINATE = SCENE_SIZE - 1;
+export const MAX_STRUCTURE_BLOCKS = 100_000;
+export const MAX_VISITED_COORDINATES = 800_000;
 
 export type VoxelBlock = {
   x: number;
@@ -66,8 +73,8 @@ export type Box3D = Box2D & {
 };
 
 export type SceneBounds = {
-  width: 64;
-  depth: 64;
+  width: typeof SCENE_SIZE;
+  depth: typeof SCENE_SIZE;
   maxHeight: number;
 };
 
@@ -132,7 +139,7 @@ export type WorldPlan = {
 };
 
 export type WorldPlanMetadata = {
-  provider: "deepseek" | "local";
+  provider: "deepseek" | "claude" | "local";
   prompt: string;
   seed: number;
   planVersion: 1;
@@ -141,7 +148,7 @@ export type WorldPlanMetadata = {
 export type GenerationMetadata = {
   prompt: string;
   seed: number;
-  provider: "deepseek-buildscript" | "local";
+  provider: "deepseek-buildscript" | "claude-buildscript" | "local";
   compilerVersion: string;
   buildScript?: BuildScript;
   operationCount: number;
@@ -181,7 +188,7 @@ export type QualityReport = {
   };
 };
 
-export const BLOCK_IDS = [
+export const RECOMMENDED_BLOCK_IDS = [
   "minecraft:oak_planks",
   "minecraft:spruce_planks",
   "minecraft:stone_bricks",
@@ -189,7 +196,7 @@ export const BLOCK_IDS = [
   "minecraft:glass_pane",
   "minecraft:oak_log",
   "minecraft:spruce_stairs",
-  "minecraft:brick",
+  "minecraft:bricks",
   "minecraft:sandstone",
   "minecraft:red_sandstone",
   "minecraft:dark_oak_planks",
@@ -205,8 +212,11 @@ export const BLOCK_IDS = [
   "minecraft:sea_lantern"
 ] as const satisfies readonly BlockId[];
 
+export const BLOCK_IDS: readonly BlockId[] = MINECRAFT_BLOCK_IDS;
+const BLOCK_ID_SET: ReadonlySet<string> = new Set(MINECRAFT_BLOCK_IDS);
+
 export function isBlockId(value: string): value is BlockId {
-  return /^minecraft:[a-z0-9_]+$/.test(value) && !["minecraft:air", "minecraft:cave_air", "minecraft:void_air", "minecraft:block_id"].includes(value);
+  return BLOCK_ID_SET.has(value);
 }
 
 export const BLOCK_LABELS: Partial<Record<BlockId, string>> = {
@@ -217,7 +227,7 @@ export const BLOCK_LABELS: Partial<Record<BlockId, string>> = {
   "minecraft:glass_pane": "Glass Pane",
   "minecraft:oak_log": "Oak Log",
   "minecraft:spruce_stairs": "Spruce Stairs",
-  "minecraft:brick": "Brick",
+  "minecraft:bricks": "Bricks",
   "minecraft:sandstone": "Sandstone",
   "minecraft:red_sandstone": "Red Sandstone",
   "minecraft:dark_oak_planks": "Dark Oak Planks",
@@ -241,7 +251,7 @@ export const BLOCK_COLORS: Partial<Record<BlockId, string>> = {
   "minecraft:glass_pane": "#9ed2d6",
   "minecraft:oak_log": "#7a4f2a",
   "minecraft:spruce_stairs": "#574025",
-  "minecraft:brick": "#9c4934",
+  "minecraft:bricks": "#9c4934",
   "minecraft:sandstone": "#d6bd79",
   "minecraft:red_sandstone": "#b66d43",
   "minecraft:dark_oak_planks": "#3f2c20",

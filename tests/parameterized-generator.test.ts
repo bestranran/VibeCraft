@@ -23,5 +23,5 @@ test("parameterized building is hollow, enterable, and has a continuous roof", (
   assert.equal(occupied.has("0,2,0"), false);
   const roofY = Array.from(new Set(structure.blocks.filter((block) => block.id === spec.palette.roof).map((block) => block.y))).sort((a,b) => a-b);
   assert.ok(roofY.every((y, index) => index === 0 || y <= roofY[index - 1] + 1));
-  assert.ok(structure.blocks.some((block) => block.id === "minecraft:brick"));
+  assert.ok(structure.blocks.some((block) => block.id === "minecraft:bricks"));
 });

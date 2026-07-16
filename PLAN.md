@@ -444,3 +444,14 @@ Implement sequentially and avoid unrelated feature expansion:
 7. Complete conversational workflow evaluation.
 
 Do not add authentic resource rendering, multi-version support, `.schem` import, multi-candidate generation, aesthetic ranking, or additional AI providers until the conversational edit loop works reliably.
+
+## Deferred Material-Palette Improvements
+
+The current experiment sends the complete Minecraft Java 1.20.1 occupied-block registry to the generation AI without palette-size requirements, category filtering, material-diversity scoring, or automatic aesthetic repair. Observe the resulting generations before adding constraints.
+
+Keep these possible follow-ups recorded but do not enable them during the experiment:
+
+- Prompt-aware material categories instead of sending the entire registry every time.
+- Semantic material roles such as structure, surface, trim, glazing, lighting, and landscape.
+- Optional palette-diversity guidance or a post-generation material review.
+- Richer geometry and block-state/orientation support for stairs, slabs, walls, fences, doors, and trapdoors.

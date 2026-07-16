@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { applyBuildingOperations } from "@/lib/building-operations";
 import { LocalBuildingPlanner } from "@/lib/building-planner";
-import { DeepSeekVoxelEditPlanner } from "@/lib/deepseek-voxel-edit-planner";
-import { isBlockId } from "@/lib/structure";
+import { createAiVoxelEditPlanner } from "@/lib/deepseek-voxel-edit-planner";
+import { MAX_STRUCTURE_BLOCKS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "@/lib/structure";
 import type { Box3D, GenerationMetadata, SemanticRegion, VoxelBlock, VoxelStructure } from "@/lib/structure";
 import { createVoxelEditContext, assertVoxelEditScope } from "@/lib/voxel-edit-context";
 import { executeVoxelTools } from "@/lib/voxel-tools";
+import { resolveAiConnection } from "@/lib/ai-provider";
 
 type EditRequest = {
   command?: unknown;
@@ -29,11 +30,14 @@ export async function POST(request: Request) {
     const writableBounds = body.writableBounds === undefined ? undefined : parseBox(body.writableBounds, "writableBounds");
     const command = body.command.trim();
     const context = createVoxelEditContext(structure, { generationMetadata, semanticRegions, writableBounds });
-    const browserApiKey = request.headers.get("x-deepseek-api-key")?.trim();
-    const apiKey = browserApiKey || process.env.DEEPSEEK_API_KEY;
+    const connection = resolveAiConnection(request);
 
-    if (apiKey) {
-      const plan = await new DeepSeekVoxelEditPlanner(apiKey).planEdit(command, context);
+    if (connection) {
+      const plan = await createAiVoxelEditPlanner(connection.provider, connection.apiKey, {
+        ...(connection.baseUrl ? { baseUrl: connection.baseUrl } : {}),
+        ...(connection.apiMode ? { apiMode: connection.apiMode } : {}),
+        ...(connection.model ? { model: connection.model } : {})
+      }).planEdit(command, context);
       const execution = executeVoxelTools(structure, plan.toolCalls, {
         writableBounds,
         regions: semanticRegions
@@ -47,7 +51,7 @@ export async function POST(request: Request) {
         summary: plan.summary,
         affectedOwnerIds: plan.affectedOwnerIds,
         repaired: plan.repaired,
-        provider: "deepseek-voxel-edit",
+        provider: `${connection.provider}-voxel-edit`,
         fallback: false
       });
     }
@@ -77,7 +81,7 @@ export async function POST(request: Request) {
 function parseStructure(value: unknown): VoxelStructure {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("A valid accepted structure is required.");
   const raw = value as Record<string, unknown>;
-  if (typeof raw.name !== "string" || !Array.isArray(raw.blocks) || !raw.blocks.length || raw.blocks.length > 100_000) {
+  if (typeof raw.name !== "string" || !Array.isArray(raw.blocks) || !raw.blocks.length || raw.blocks.length > MAX_STRUCTURE_BLOCKS) {
     throw new Error("A valid non-empty accepted structure is required.");
   }
   const seen = new Set<string>();
@@ -86,7 +90,7 @@ function parseStructure(value: unknown): VoxelStructure {
     const block = item as Record<string, unknown>;
     if (![block.x, block.y, block.z].every(Number.isInteger)) throw new Error(`Block ${index + 1} must use integer coordinates.`);
     const x = block.x as number, y = block.y as number, z = block.z as number;
-    if (x < 0 || x >= 64 || y < 0 || y >= 64 || z < 0 || z >= 64) throw new Error(`Block ${index + 1} is outside the 64×64×64 scene.`);
+    if (x < 0 || x >= SCENE_SIZE || y < 0 || y >= SCENE_SIZE || z < 0 || z >= SCENE_SIZE) throw new Error(`Block ${index + 1} is outside the ${SCENE_SIZE}×${SCENE_SIZE}×${SCENE_SIZE} scene.`);
     if (typeof block.id !== "string" || !isBlockId(block.id)) throw new Error(`Block ${index + 1} has an invalid material.`);
     if (block.ownerId !== undefined && (typeof block.ownerId !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(block.ownerId))) {
       throw new Error(`Block ${index + 1} has an invalid ownerId.`);
@@ -103,7 +107,7 @@ function parseGenerationMetadata(value: unknown): GenerationMetadata | undefined
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("generationMetadata is invalid.");
   const raw = value as Record<string, unknown>;
-  if (typeof raw.prompt !== "string" || !Number.isInteger(raw.seed) || (raw.provider !== "deepseek-buildscript" && raw.provider !== "local") || typeof raw.compilerVersion !== "string") {
+  if (typeof raw.prompt !== "string" || !Number.isInteger(raw.seed) || (raw.provider !== "deepseek-buildscript" && raw.provider !== "claude-buildscript" && raw.provider !== "local") || typeof raw.compilerVersion !== "string") {
     throw new Error("generationMetadata is invalid.");
   }
   if (raw.buildScript !== undefined) {
@@ -130,7 +134,7 @@ function parseBox(value: unknown, field: string): Box3D {
   const values = [raw.minX, raw.minY, raw.minZ, raw.maxX, raw.maxY, raw.maxZ];
   if (!values.every(Number.isInteger)) throw new Error(`${field} must use integer coordinates.`);
   const bounds = raw as unknown as Box3D;
-  if (bounds.minX < 0 || bounds.minY < 0 || bounds.minZ < 0 || bounds.maxX >= 64 || bounds.maxY >= 64 || bounds.maxZ >= 64 || bounds.minX > bounds.maxX || bounds.minY > bounds.maxY || bounds.minZ > bounds.maxZ) {
+  if (bounds.minX < 0 || bounds.minY < 0 || bounds.minZ < 0 || bounds.maxX > SCENE_MAX_COORDINATE || bounds.maxY > SCENE_MAX_COORDINATE || bounds.maxZ > SCENE_MAX_COORDINATE || bounds.minX > bounds.maxX || bounds.minY > bounds.maxY || bounds.minZ > bounds.maxZ) {
     throw new Error(`${field} is outside the scene or inverted.`);
   }
   return { minX: bounds.minX, minY: bounds.minY, minZ: bounds.minZ, maxX: bounds.maxX, maxY: bounds.maxY, maxZ: bounds.maxZ };

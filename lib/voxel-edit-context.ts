@@ -1,4 +1,5 @@
 import { getBoundingBox } from "./structure-analysis";
+import { SCENE_SIZE } from "./structure";
 import type {
   BlockId,
   Box3D,
@@ -20,7 +21,7 @@ export type VoxelEditComponent = {
 
 export type VoxelEditContext = {
   scene: {
-    bounds: { width: 64; depth: 64; maxHeight: 64 };
+    bounds: { width: typeof SCENE_SIZE; depth: typeof SCENE_SIZE; maxHeight: typeof SCENE_SIZE };
     occupiedBounds: Box3D | null;
     blockCount: number;
     palette: BlockId[];
@@ -84,7 +85,7 @@ export function createVoxelEditContext(structure: VoxelStructure, options: Conte
   const metadata = options.generationMetadata;
   const context: VoxelEditContext = {
     scene: {
-      bounds: { width: 64, depth: 64, maxHeight: 64 },
+      bounds: { width: SCENE_SIZE, depth: SCENE_SIZE, maxHeight: SCENE_SIZE },
       occupiedBounds: getBoundingBox(structure),
       blockCount: structure.blocks.length,
       palette: Array.from(new Set(structure.blocks.map((block) => block.id))).sort()

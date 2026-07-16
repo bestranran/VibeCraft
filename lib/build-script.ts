@@ -1,10 +1,10 @@
-import { isBlockId } from "./structure";
+import { isBlockId, MAX_STRUCTURE_BLOCKS, MAX_VISITED_COORDINATES, SCENE_MAX_COORDINATE, SCENE_SIZE } from "./structure";
 import type { BlockId, Box3D, Position } from "./structure";
 
 export type BuildScriptBounds = {
-  width: 64;
-  depth: 64;
-  maxHeight: 64;
+  width: typeof SCENE_SIZE;
+  depth: typeof SCENE_SIZE;
+  maxHeight: typeof SCENE_SIZE;
 };
 
 export type BuildScriptMaterial = string;
@@ -137,8 +137,8 @@ export type BuildScriptBudgets = {
 export const DEFAULT_BUILD_SCRIPT_BUDGETS: BuildScriptBudgets = {
   maxOperations: 64,
   maxToolCalls: 512,
-  maxCoordinates: 100_000,
-  maxChangedBlocks: 100_000
+  maxCoordinates: MAX_VISITED_COORDINATES,
+  maxChangedBlocks: MAX_STRUCTURE_BLOCKS
 };
 
 export class BuildScriptValidationError extends Error {
@@ -187,9 +187,9 @@ function position(value: unknown, field: string, minimums: Position): Position {
     throw new BuildScriptValidationError([`${field} must contain exactly x, y, and z.`]);
   }
   return [
-    integer(value[0], `${field}[0]`, minimums[0], 64),
-    integer(value[1], `${field}[1]`, minimums[1], 64),
-    integer(value[2], `${field}[2]`, minimums[2], 64)
+    integer(value[0], `${field}[0]`, minimums[0], SCENE_SIZE),
+    integer(value[1], `${field}[1]`, minimums[1], SCENE_SIZE),
+    integer(value[2], `${field}[2]`, minimums[2], SCENE_SIZE)
   ];
 }
 
@@ -198,9 +198,9 @@ function signedPosition(value: unknown, field: string): Position {
     throw new BuildScriptValidationError([`${field} must contain exactly x, y, and z.`]);
   }
   return [
-    integer(value[0], `${field}[0]`, -63, 63),
-    integer(value[1], `${field}[1]`, -63, 63),
-    integer(value[2], `${field}[2]`, -63, 63)
+    integer(value[0], `${field}[0]`, -SCENE_MAX_COORDINATE, SCENE_MAX_COORDINATE),
+    integer(value[1], `${field}[1]`, -SCENE_MAX_COORDINATE, SCENE_MAX_COORDINATE),
+    integer(value[2], `${field}[2]`, -SCENE_MAX_COORDINATE, SCENE_MAX_COORDINATE)
   ];
 }
 
@@ -363,8 +363,8 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     };
   } else if (raw.type === "cylinder") {
     const origin = position(raw.origin, field("origin"), [0, 0, 0]);
-    const radius = integer(raw.radius, field("radius"), 1, 16);
-    const height = integer(raw.height, field("height"), 1, 64);
+    const radius = integer(raw.radius, field("radius"), 1, 32);
+    const height = integer(raw.height, field("height"), 1, SCENE_SIZE);
     if (raw.hollow !== undefined && typeof raw.hollow !== "boolean") {
       throw new BuildScriptValidationError([`${field("hollow")} must be a boolean.`]);
     }
@@ -387,8 +387,8 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     };
   } else if (raw.type === "gableRoof") {
     const target = targetComponent(raw.target, field("target"), context);
-    const height = integer(raw.height, field("height"), 1, 32);
-    const overhang = raw.overhang === undefined ? 0 : integer(raw.overhang, field("overhang"), 0, 8);
+    const height = integer(raw.height, field("height"), 1, 64);
+    const overhang = raw.overhang === undefined ? 0 : integer(raw.overhang, field("overhang"), 0, 16);
     const ridgeAxis = raw.ridgeAxis === undefined
       ? target.bounds.maxX - target.bounds.minX >= target.bounds.maxZ - target.bounds.minZ ? "x" : "z"
       : raw.ridgeAxis;
@@ -407,8 +407,8 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     };
   } else if (raw.type === "flatRoof") {
     const target = targetComponent(raw.target, field("target"), context);
-    const overhang = raw.overhang === undefined ? 0 : integer(raw.overhang, field("overhang"), 0, 8);
-    const thickness = raw.thickness === undefined ? 1 : integer(raw.thickness, field("thickness"), 1, 4);
+    const overhang = raw.overhang === undefined ? 0 : integer(raw.overhang, field("overhang"), 0, 16);
+    const thickness = raw.thickness === undefined ? 1 : integer(raw.thickness, field("thickness"), 1, 8);
     componentBounds = roofBounds(target.bounds, overhang, thickness);
     operation = {
       type: raw.type,
@@ -421,9 +421,9 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
   } else if (raw.type === "entrance") {
     const target = targetComponent(raw.target, field("target"), context);
     const selectedSide = side(raw.side, field("side"));
-    const width = raw.width === undefined ? 2 : integer(raw.width, field("width"), 1, 4);
-    const height = raw.height === undefined ? 3 : integer(raw.height, field("height"), 2, 5);
-    const offset = raw.offset === undefined ? 0 : integer(raw.offset, field("offset"), -16, 16);
+    const width = raw.width === undefined ? 2 : integer(raw.width, field("width"), 1, 8);
+    const height = raw.height === undefined ? 3 : integer(raw.height, field("height"), 2, 10);
+    const offset = raw.offset === undefined ? 0 : integer(raw.offset, field("offset"), -32, 32);
     if (target.bounds.minY + height >= target.bounds.maxY) {
       throw new BuildScriptValidationError([`${field("height")} must leave at least one wall block above the entrance.`]);
     }
@@ -444,10 +444,10 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     if (selectedSide !== "all" && selectedSide !== "front" && selectedSide !== "back" && selectedSide !== "left" && selectedSide !== "right") {
       throw new BuildScriptValidationError([`${field("side")} must be front, back, left, right, or all.`]);
     }
-    const count = integer(raw.count, field("count"), 1, 12);
-    const width = raw.width === undefined ? 1 : integer(raw.width, field("width"), 1, 3);
-    const height = raw.height === undefined ? 2 : integer(raw.height, field("height"), 1, 3);
-    const sillHeight = raw.sillHeight === undefined ? 2 : integer(raw.sillHeight, field("sillHeight"), 1, 32);
+    const count = integer(raw.count, field("count"), 1, 24);
+    const width = raw.width === undefined ? 1 : integer(raw.width, field("width"), 1, 6);
+    const height = raw.height === undefined ? 2 : integer(raw.height, field("height"), 1, 6);
+    const sillHeight = raw.sillHeight === undefined ? 2 : integer(raw.sillHeight, field("sillHeight"), 1, 64);
     if (target.bounds.minY + sillHeight + height - 1 >= target.bounds.maxY) {
       throw new BuildScriptValidationError([`${field("sillHeight")} and height must leave a top wall support.`]);
     }
@@ -479,8 +479,8 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     const target = targetComponent(raw.target, field("target"), context);
     const selectedSide = side(raw.side, field("side"));
     const span = sideSpan(target.bounds, selectedSide);
-    const width = integer(raw.width, field("width"), 1, 16);
-    const depth = integer(raw.depth, field("depth"), 1, 8);
+    const width = integer(raw.width, field("width"), 1, 32);
+    const depth = integer(raw.depth, field("depth"), 1, 16);
     if (width > span.maximum - span.minimum + 1) {
       throw new BuildScriptValidationError([`${field("width")} does not fit between the target's corner supports.`]);
     }
@@ -499,8 +499,8 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
     if (target.type !== "entrance" || !target.side || !target.targetId) {
       throw new BuildScriptValidationError([`${field("target")} must reference an entrance component.`]);
     }
-    const length = integer(raw.length, field("length"), 2, 24);
-    const width = integer(raw.width, field("width"), 1, 5);
+    const length = integer(raw.length, field("length"), 2, 48);
+    const width = integer(raw.width, field("width"), 1, 10);
     const entranceCenterX = Math.floor((target.bounds.minX + target.bounds.maxX) / 2);
     const entranceCenterZ = Math.floor((target.bounds.minZ + target.bounds.maxZ) / 2);
     const half = Math.floor(width / 2);
@@ -520,7 +520,7 @@ function validateOperation(value: unknown, index: number, context: ValidationCon
       operation = { type: raw.type, id, target: target.id, mode: raw.mode, offset };
     } else {
       if (raw.axis !== "x" && raw.axis !== "z") throw new BuildScriptValidationError([`${field("axis")} must be x or z.`]);
-      const pivot = integer(raw.pivot, field("pivot"), 0, 63);
+      const pivot = integer(raw.pivot, field("pivot"), 0, SCENE_MAX_COORDINATE);
       operation = { type: raw.type, id, target: target.id, mode: raw.mode, axis: raw.axis, pivot };
     }
     componentBounds = transformedBounds(target.bounds, operation);
@@ -548,10 +548,12 @@ export function validateBuildScript(
     throw new BuildScriptValidationError(["name must contain from 1 to 80 characters."]);
   }
   const rawBounds = record(raw.bounds, "bounds");
-  if (rawBounds.width !== 64 || rawBounds.depth !== 64 || rawBounds.maxHeight !== 64) {
-    throw new BuildScriptValidationError(["bounds must be exactly 64x64x64 for BuildScript v1."]);
+  const isCurrentBounds = rawBounds.width === SCENE_SIZE && rawBounds.depth === SCENE_SIZE && rawBounds.maxHeight === SCENE_SIZE;
+  const isLegacyBounds = rawBounds.width === 64 && rawBounds.depth === 64 && rawBounds.maxHeight === 64;
+  if (!isCurrentBounds && !isLegacyBounds) {
+    throw new BuildScriptValidationError([`bounds must be exactly ${SCENE_SIZE}x${SCENE_SIZE}x${SCENE_SIZE} for BuildScript v1.`]);
   }
-  const bounds: BuildScriptBounds = { width: 64, depth: 64, maxHeight: 64 };
+  const bounds: BuildScriptBounds = { width: SCENE_SIZE, depth: SCENE_SIZE, maxHeight: SCENE_SIZE };
   const palette = validatePalette(raw.palette);
   if (!Array.isArray(raw.operations) || !raw.operations.length) {
     throw new BuildScriptValidationError(["operations must contain at least one operation."]);

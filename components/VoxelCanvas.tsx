@@ -1,10 +1,11 @@
 "use client";
 
-import { Bounds, OrbitControls } from "@react-three/drei";
+import { Bounds, OrbitControls, useBounds } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { getBlockColor } from "@/lib/structure";
+import { loadMinecraftModelPack, type MinecraftModelPack } from "@/lib/minecraft-model-renderer";
+import { getBlockColor, SCENE_SIZE } from "@/lib/structure";
 import { coordinateKey } from "@/lib/patches";
 import type { BlockId, PendingEdit, VoxelBlock, VoxelStructure } from "@/lib/structure";
 
@@ -28,12 +29,13 @@ export function VoxelCanvas({ structure, pendingEdit }: VoxelCanvasProps) {
         <VoxelScene structure={structure} pendingEdit={pendingEdit} />
       </Bounds>
       <GridFloor />
-      <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={5} maxDistance={140} />
+      <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={5} maxDistance={SCENE_SIZE * 2.5} />
     </Canvas>
   );
 }
 
 function VoxelScene({ structure, pendingEdit }: VoxelCanvasProps) {
+  const boundsApi = useBounds();
   const scene = useMemo(() => {
     if (!pendingEdit) return { normal: structure.blocks, added: [] as VoxelBlock[], removed: [] as VoxelBlock[] };
     const changedKeys = new Set(pendingEdit.patch.changes.map((change) => coordinateKey(change.type === "replace" ? change.after : change.block)));
@@ -43,12 +45,40 @@ function VoxelScene({ structure, pendingEdit }: VoxelCanvasProps) {
     return { normal, added, removed };
   }, [pendingEdit, structure.blocks]);
   const groups = useMemo(() => groupBlocks(scene.normal), [scene.normal]);
+  const blockIds = useMemo(() => [...new Set(groups.map((group) => group.id))].sort(), [groups]);
+  const blockIdKey = blockIds.join("|");
+  const [modelPackState, setModelPackState] = useState<{ key: string; pack: MinecraftModelPack | null } | null>(null);
+  const modelPack = modelPackState?.key === blockIdKey ? modelPackState.pack : null;
+  useEffect(() => {
+    let active = true;
+    void loadMinecraftModelPack(blockIds).then((pack) => {
+      if (active) setModelPackState({ key: blockIdKey, pack });
+    });
+    return () => { active = false; };
+  // blockIdKey is the stable palette identity; blockIds is recreated with the same contents as blocks move.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blockIdKey]);
   const center = useMemo(() => {
     const blocks = pendingEdit?.preview.blocks ?? structure.blocks;
     if (!blocks.length) return [0, 0.5, 0] as const;
     const xs = blocks.map((block) => block.x); const zs = blocks.map((block) => block.z);
     return [-((Math.min(...xs) + Math.max(...xs)) / 2), 0.5, -((Math.min(...zs) + Math.max(...zs)) / 2)] as const;
   }, [pendingEdit, structure.blocks]);
+  const fitKey = useMemo(() => {
+    const blocks = pendingEdit?.preview.blocks ?? structure.blocks;
+    if (!blocks.length) return "empty";
+    let minX = Infinity; let minY = Infinity; let minZ = Infinity;
+    let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
+    for (const block of blocks) {
+      minX = Math.min(minX, block.x); minY = Math.min(minY, block.y); minZ = Math.min(minZ, block.z);
+      maxX = Math.max(maxX, block.x); maxY = Math.max(maxY, block.y); maxZ = Math.max(maxZ, block.z);
+    }
+    return `${blocks.length}:${minX},${minY},${minZ}:${maxX},${maxY},${maxZ}`;
+  }, [pendingEdit, structure.blocks]);
+  useLayoutEffect(() => {
+    if (fitKey === "empty") return;
+    boundsApi.refresh().clip().fit();
+  }, [boundsApi, fitKey, modelPack]);
 
   if (structure.blocks.length === 0 && !pendingEdit) {
     return null;
@@ -56,10 +86,15 @@ function VoxelScene({ structure, pendingEdit }: VoxelCanvasProps) {
 
   return (
     <group position={center}>
-      {Object.entries(groups).map(([id, blocks]) => (
-        <InstancedBlocks key={id} id={id as BlockId} blocks={blocks ?? []} />
+      {groups.map((group) => (
+        <InstancedBlocks
+          key={group.key}
+          id={group.id}
+          blocks={group.blocks}
+          properties={group.properties}
+          modelPack={modelPack}
+        />
       ))}
-      <InstancedEdges blocks={scene.normal} />
       {scene.added.length > 0 && <PreviewBlocks blocks={scene.added} color="#41d69a" opacity={0.72} />}
       {scene.removed.length > 0 && <PreviewBlocks blocks={scene.removed} color="#ef655a" opacity={0.5} />}
     </group>
@@ -78,6 +113,7 @@ function PreviewBlocks({ blocks, color, opacity }: { blocks: VoxelBlock[]; color
       mesh.setMatrixAt(index, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
   }, [blocks, dummy]);
   return (
@@ -88,9 +124,21 @@ function PreviewBlocks({ blocks, color, opacity }: { blocks: VoxelBlock[]; color
   );
 }
 
-function InstancedBlocks({ id, blocks }: { id: BlockId; blocks: VoxelBlock[] }) {
+function InstancedBlocks({ id, blocks, properties, modelPack }: {
+  id: BlockId;
+  blocks: VoxelBlock[];
+  properties: Record<string, string>;
+  modelPack: MinecraftModelPack | null;
+}) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const propertyKey = Object.entries(properties).sort().map(([key, value]) => `${key}=${value}`).join(",");
+  const geometry = useMemo(
+    () => modelPack?.getGeometry(id, properties) ?? null,
+    // propertyKey is a stable serialization of the inferred block state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id, modelPack, propertyKey],
+  );
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -101,56 +149,92 @@ function InstancedBlocks({ id, blocks }: { id: BlockId; blocks: VoxelBlock[] }) 
       mesh.setMatrixAt(index, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingBox();
     mesh.computeBoundingSphere();
-  }, [blocks, dummy]);
+  }, [blocks, dummy, geometry]);
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, blocks.length]} castShadow receiveShadow>
-      <boxGeometry args={[0.98, 0.98, 0.98]} />
-      <meshStandardMaterial color={getBlockColor(id)} roughness={0.82} metalness={0.02} />
+    <instancedMesh ref={meshRef} args={[geometry ?? undefined, undefined, blocks.length]} castShadow receiveShadow>
+      {!geometry && <boxGeometry args={[0.98, 0.98, 0.98]} />}
+      {geometry && modelPack ? (
+        <meshStandardMaterial
+          map={modelPack.atlasTexture}
+          vertexColors
+          alphaTest={0.02}
+          transparent
+          opacity={id === "minecraft:water" ? 0.72 : 1}
+          emissive={isEmissiveBlock(id) ? "#ffffff" : "#000000"}
+          emissiveMap={isEmissiveBlock(id) ? modelPack.atlasTexture : null}
+          emissiveIntensity={isEmissiveBlock(id) ? 0.32 : 0}
+          roughness={0.9}
+          metalness={0}
+        />
+      ) : (
+        <meshStandardMaterial color={getBlockColor(id)} roughness={0.82} metalness={0.02} />
+      )}
     </instancedMesh>
   );
 }
 
-function InstancedEdges({ blocks }: { blocks: VoxelBlock[] }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    blocks.forEach((block, index) => {
-      dummy.position.set(block.x, block.y, block.z);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
-  }, [blocks, dummy]);
-
-  return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, blocks.length]}>
-      <boxGeometry args={[1.005, 1.005, 1.005]} />
-      <meshBasicMaterial color="#17120d" wireframe transparent opacity={0.22} />
-    </instancedMesh>
-  );
+function isEmissiveBlock(id: BlockId) {
+  return /(?:lantern|glowstone|shroomlight|froglight|magma|lava|redstone_lamp|sea_pickle)/.test(id);
 }
 
 function GridFloor() {
   return (
     <group>
-      <gridHelper args={[72, 72, "#6f7f4f", "#36352f"]} position={[0, -0.02, 0]} />
+      <gridHelper args={[SCENE_SIZE + 16, SCENE_SIZE + 16, "#6f7f4f", "#36352f"]} position={[0, -0.02, 0]} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
-        <planeGeometry args={[72, 72]} />
+        <planeGeometry args={[SCENE_SIZE + 16, SCENE_SIZE + 16]} />
         <meshStandardMaterial color="#202018" roughness={1} />
       </mesh>
     </group>
   );
 }
 
-function groupBlocks(blocks: VoxelBlock[]) {
-  return blocks.reduce<Partial<Record<BlockId, VoxelBlock[]>>>((acc, block) => {
-    (acc[block.id] ??= []).push(block);
-    return acc;
-  }, {});
+type RenderGroup = {
+  key: string;
+  id: BlockId;
+  properties: Record<string, string>;
+  blocks: VoxelBlock[];
+};
+
+function groupBlocks(blocks: VoxelBlock[]): RenderGroup[] {
+  const occupied = new Set(blocks.map((block) => `${block.x},${block.y},${block.z}`));
+  const groups = new Map<string, RenderGroup>();
+  for (const block of blocks) {
+    const properties = inferredConnectionProperties(block, occupied);
+    const state = Object.entries(properties).sort().map(([key, value]) => `${key}=${value}`).join(",");
+    const key = `${block.id}[${state}]`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, id: block.id, properties, blocks: [] };
+      groups.set(key, group);
+    }
+    group.blocks.push(block);
+  }
+  return [...groups.values()];
+}
+
+function inferredConnectionProperties(block: VoxelBlock, occupied: Set<string>): Record<string, string> {
+  const id = block.id;
+  const isPaneOrFence = id === "minecraft:iron_bars" || id.endsWith("_pane") || id.endsWith("_fence");
+  const isWall = id.endsWith("_wall");
+  if (!isPaneOrFence && !isWall) return {};
+  const neighbors = {
+    north: occupied.has(`${block.x},${block.y},${block.z - 1}`),
+    east: occupied.has(`${block.x + 1},${block.y},${block.z}`),
+    south: occupied.has(`${block.x},${block.y},${block.z + 1}`),
+    west: occupied.has(`${block.x - 1},${block.y},${block.z}`),
+  };
+  if (isWall) {
+    return {
+      north: neighbors.north ? "low" : "none",
+      east: neighbors.east ? "low" : "none",
+      south: neighbors.south ? "low" : "none",
+      west: neighbors.west ? "low" : "none",
+      up: "true",
+    };
+  }
+  return Object.fromEntries(Object.entries(neighbors).map(([direction, connected]) => [direction, connected ? "true" : "false"]));
 }

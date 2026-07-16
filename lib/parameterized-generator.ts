@@ -35,7 +35,7 @@ export function generateFromSpec(spec: BuildingSpec): VoxelStructure {
   if (spec.features.includes("lanterns")) { set(-1, 3, -hz - 1, "minecraft:lantern"); set(1, 3, -hz - 1, "minecraft:lantern"); }
   if (spec.features.includes("chimney")) {
     const x = Math.max(1, hx - 2); const z = 1; const top = wallTop + spec.roof.height + 2;
-    for (let y = wallTop; y <= top; y += 1) set(x, y, z, y === top ? "minecraft:cobblestone" : "minecraft:brick");
+    for (let y = wallTop; y <= top; y += 1) set(x, y, z, y === top ? "minecraft:cobblestone" : "minecraft:bricks");
   }
 
   const blocks = Array.from(map.values());

@@ -27,7 +27,7 @@ test("combined taller roof and chimney stays vertically continuous", () => {
   ]).structure;
   const roofY = Array.from(new Set(getRoofBlocks(result).map((block) => block.y))).sort((a, b) => a - b);
   assert.ok(roofY.every((y, index) => index === 0 || y <= roofY[index - 1] + 1));
-  const leftBrick = result.blocks.filter((block) => block.id === "minecraft:brick" && block.x < 0);
+  const leftBrick = result.blocks.filter((block) => block.id === "minecraft:bricks" && block.x < 0);
   const columns = new Map<string, number[]>();
   leftBrick.forEach((block) => columns.set(`${block.x},${block.z}`, [...(columns.get(`${block.x},${block.z}`) ?? []), block.y]));
   assert.ok(Array.from(columns.values()).some((ys) => ys.sort((a, b) => a - b).every((y, index) => index === 0 || y === ys[index - 1] + 1)));
@@ -43,7 +43,7 @@ test("windows replace wall blocks and do not add exterior blocks", () => {
 test("chimney is vertical and path starts at ground in front of door", () => {
   const structure = generateStructure("desert tower");
   const chimney = applyBuildingOperations(structure, parseEditCommand("添加烟囱", structure)).structure;
-  const addedBrick = chimney.blocks.filter((block) => block.id === "minecraft:brick");
+  const addedBrick = chimney.blocks.filter((block) => block.id === "minecraft:bricks");
   assert.ok(addedBrick.length >= 3);
   const sameColumn = addedBrick.filter((block) => block.x === addedBrick[0].x && block.z === addedBrick[0].z).map((block) => block.y).sort((a, b) => a - b);
   assert.ok(sameColumn.every((y, index) => index === 0 || y === sameColumn[index - 1] + 1));

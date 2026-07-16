@@ -9,7 +9,7 @@ const before: VoxelStructure = { name: "test", size: [2, 1, 1], blocks: [
 ] };
 const after: VoxelStructure = { name: "test", size: [2, 2, 1], blocks: [
   { x: 0, y: 0, z: 0, id: "minecraft:stone_bricks" },
-  { x: 0, y: 1, z: 0, id: "minecraft:brick" }
+  { x: 0, y: 1, z: 0, id: "minecraft:bricks" }
 ] };
 
 test("diff, apply and invert patches are lossless", () => {

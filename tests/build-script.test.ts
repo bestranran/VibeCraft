@@ -142,7 +142,7 @@ test("invalid materials, references, dimensions, and scene bounds are rejected b
     operations: [{
       type: "hollowBox", id: "tiny", origin: [1, 1, 1], size: [2, 1, 2], wall: "walls"
     }]
-  }), /must be an integer from 3 to 64/);
+  }), /must be an integer from 3 to 128/);
 
   assert.throws(() => validateBuildScript({
     ...gableFixture,
@@ -216,7 +216,7 @@ test("solid and hollow cylinders remain bounded and deterministic", () => {
   assert.ok(result.structure.blocks.some((block) => block.x === 12 && block.y === 4 && block.z === 12));
   assert.equal(result.structure.blocks.some((block) => block.x === 28 && block.y === 4 && block.z === 12), false);
   assert.ok(result.structure.blocks.some((block) => block.x === 28 && block.y === 0 && block.z === 12));
-  assert.ok(result.structure.blocks.every((block) => block.x >= 0 && block.x < 64 && block.y >= 0 && block.y < 64 && block.z >= 0 && block.z < 64));
+  assert.ok(result.structure.blocks.every((block) => block.x >= 0 && block.x < 128 && block.y >= 0 && block.y < 128 && block.z >= 0 && block.z < 128));
 });
 
 test("copyMirror uses a source snapshot and preserves semantic ownership", () => {

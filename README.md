@@ -4,18 +4,19 @@ See [PRODUCT_RULES.md](./PRODUCT_RULES.md) for the product positioning and archi
 
 VibeCraft Studio is an open source MVP for a browser-based Minecraft-style 3D voxel building editor. Type a building prompt, generate a validated BuildScript structure, inspect it in 3D, then export it as a WorldEdit `.schem` or Minecraft `.mcfunction` file.
 
-General edits can be planned by DeepSeek from component-aware context and are then executed by the local deterministic voxel engine. It does not connect to Minecraft yet.
+General edits can be planned by DeepSeek or Claude from component-aware context and are then executed by the local deterministic voxel engine. It does not connect to Minecraft yet.
 
 ## Features
 
 - Prompt panel with example prompts and one-click generation.
-- DeepSeek initial generation using one complete BuildScript v1 document, deterministic local compilation, structural validation, and at most one repair attempt.
+- DeepSeek or Claude initial generation using one complete BuildScript v1 document, deterministic local compilation, structural validation, and at most one repair attempt.
 - BuildScript operations for foundations, hollow shells, cylinders, roofs, entrances, windows, porches, paths, copying, and mirroring.
 - Project documents retain the source BuildScript, original prompt, deterministic seed, provider, compiler version, validation warnings, and generation counts.
-- DeepSeek-assisted `64×64` world planning with deterministic road/lot geometry, validation, seeds, and a top-down preview.
+- DeepSeek- or Claude-assisted `128×128` world planning with deterministic road/lot geometry, validation, seeds, and a top-down preview.
 - Mock prompt-to-structure generator for medieval cottages, Japanese tea houses, desert sandstone towers, and a default cottage.
 - React Three Fiber voxel preview with orbit, pan, zoom, lighting, shadows, block outlines, and grid floor.
 - Inspector panel with size, block count, and used block palette.
+- Complete Minecraft Java 1.20.1 occupied-block registry (1,000 block IDs), with validation, generated preview labels/colors, and original IDs preserved in exports.
 - Server-side Sponge `.schem` v2 export for WorldEdit on Minecraft Java 1.20.1, including palette, sparse-air, origin, and offset handling.
 - `.mcfunction` export using relative coordinates such as `setblock ~0 ~0 ~0 minecraft:stone_bricks`.
 - Component-aware conversational edits using bounded fill, remove, replace, line, copy, and mirror tools across buildings and non-building subjects.
@@ -38,12 +39,17 @@ General edits can be planned by DeepSeek from component-aware context and are th
 
 ```bash
 npm install
+npm run assets:minecraft
 npm run dev
 ```
 
 Open the local URL printed by Next.js, usually `http://localhost:3000`.
 
-To enable AI generation and editing, enter a DeepSeek API key in the connection dialog shown on first launch, or use the key button in the canvas toolbar. The browser option keeps the key only in `sessionStorage` and sends it to this app's server. For a shared deployment, you can instead create `.env.local` from `.env.example`, set `DEEPSEEK_API_KEY`, and restart the server. Without a key, initial generation uses the local offline fixture and edits use the local parser. Provider or validation failures preserve the current building.
+`npm run assets:minecraft` downloads the official Minecraft Java 1.20.1 client from Mojang, verifies it with Mojang's SHA-1, and extracts its blockstates, block models, and textures into a local ignored directory. Mojang's assets are not committed or redistributed with this repository. The preview uses the MIT-licensed Deepslate model parser for original geometry, UVs, tint layers, rotations, and multipart models, while generated block colors remain the offline fallback.
+
+To enable AI generation and editing, choose DeepSeek or Claude and enter its API key in the connection dialog shown on first launch, or use the key button in the canvas toolbar. Claude defaults to the `claude-opus-4-8` model and the official API when the optional relay address is blank; the model ID can be changed for relays, and entering a relay address also reveals an Anthropic/OpenAI-compatible format selector. The browser option keeps the selected provider, key, model, relay address, and format only in `sessionStorage` and sends them to this app's server. For a shared deployment, create `.env.local` from `.env.example`: use `DEEPSEEK_API_KEY` for DeepSeek, or set `AI_PROVIDER=claude` with `ANTHROPIC_API_KEY` for Claude. Optional `DEEPSEEK_MODEL`/`DEEPSEEK_BASE_URL` and `ANTHROPIC_MODEL`/`ANTHROPIC_BASE_URL` settings override provider defaults. Without a key, initial generation uses the local offline fixture and edits use the local parser. Provider or validation failures preserve the current building.
+
+Claude relay services are supported in both common modes. Keep `ANTHROPIC_API_MODE=anthropic` (the default) when the relay implements Anthropic's `/v1/messages` API. Set `ANTHROPIC_API_MODE=openai-compatible` when it exposes `/chat/completions`, and set `ANTHROPIC_BASE_URL` to the relay's API root (often ending in `/v1`). The model name in `ANTHROPIC_MODEL` must match the relay's model identifier.
 
 Useful checks:
 
@@ -118,6 +124,6 @@ The generated buildings are small and deterministic by design, but they include 
 - Fixed-prompt MVP evaluation and in-game WorldEdit compatibility checks.
 - Screenshot/reference image input.
 - Minecraft mod/plugin bridge.
-- OpenAI or Claude planner implementations behind the existing planner interface.
+- Additional provider implementations behind the shared AI transport.
 - Direct block placement editing.
 - Saved projects and shareable structure presets.

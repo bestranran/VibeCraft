@@ -2,7 +2,7 @@ import { validateBuildingSpec } from "./building-spec";
 
 const SYSTEM = `You design compact, attractive Minecraft buildings. Return JSON only as {"spec": BuildingSpec}.
 BuildingSpec fields: name (English slug-like name), style medieval|japanese|desert|rustic, odd width 7..17, odd depth 7..15, floors 1..3, wallHeight 4..11, roof {type gable|hip|flat,height 1..7,overhang 0..2}, features array from chimney|porch|path|lanterns, palette {foundation,walls,roof,accent}.
-Allowed block ids: minecraft:oak_planks, minecraft:spruce_planks, minecraft:stone_bricks, minecraft:cobblestone, minecraft:glass_pane, minecraft:oak_log, minecraft:spruce_stairs, minecraft:brick, minecraft:sandstone, minecraft:red_sandstone, minecraft:dark_oak_planks, minecraft:lantern.
+Allowed block ids: minecraft:oak_planks, minecraft:spruce_planks, minecraft:stone_bricks, minecraft:cobblestone, minecraft:glass_pane, minecraft:oak_log, minecraft:spruce_stairs, minecraft:bricks, minecraft:sandstone, minecraft:red_sandstone, minecraft:dark_oak_planks, minecraft:lantern.
 Choose harmonious materials and sensible proportions. Medieval/rustic usually use a gable roof; Japanese uses a low hip roof; desert towers use flat roofs. Do not output voxel coordinates.`;
 
 export async function planBuildingWithDeepSeek(prompt: string, apiKey: string) {

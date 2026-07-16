@@ -1,5 +1,5 @@
 import { coordinateKey, diffStructures, normalizeStructure } from "./patches";
-import { isBlockId } from "./structure";
+import { MAX_VISITED_COORDINATES, SCENE_SIZE, isBlockId } from "./structure";
 import type {
   BlockId,
   Box3D,
@@ -37,7 +37,7 @@ export type VoxelToolExecution = {
 
 export const DEFAULT_TOOL_BUDGETS: VoxelToolBudgets = {
   maxCalls: 16,
-  maxCoordinates: 100_000,
+  maxCoordinates: MAX_VISITED_COORDINATES,
   maxChangedBlocks: 20_000
 };
 
@@ -154,8 +154,8 @@ export function executeVoxelTools(
   calls: VoxelToolCall[],
   options: { bounds?: SceneBounds; writableBounds?: Box3D; regions?: SemanticRegion[]; budgets?: Partial<VoxelToolBudgets> } = {}
 ): VoxelToolExecution {
-  const bounds = options.bounds ?? { width: 64, depth: 64, maxHeight: 64 };
-  if (bounds.width !== 64 || bounds.depth !== 64 || !Number.isInteger(bounds.maxHeight) || bounds.maxHeight < 1 || bounds.maxHeight > 64) throw new VoxelToolError("Scene bounds must be 64×64 with a height from 1 to 64.");
+  const bounds = options.bounds ?? { width: SCENE_SIZE, depth: SCENE_SIZE, maxHeight: SCENE_SIZE };
+  if (bounds.width !== SCENE_SIZE || bounds.depth !== SCENE_SIZE || !Number.isInteger(bounds.maxHeight) || bounds.maxHeight < 1 || bounds.maxHeight > SCENE_SIZE) throw new VoxelToolError(`Scene bounds must be ${SCENE_SIZE}×${SCENE_SIZE} with a height from 1 to ${SCENE_SIZE}.`);
   const budgets = { ...DEFAULT_TOOL_BUDGETS, ...options.budgets };
   const safeCalls = validateVoxelToolCalls(calls);
   if (safeCalls.length > budgets.maxCalls) throw new VoxelToolError(`Tool plan exceeds the ${budgets.maxCalls} call budget.`);

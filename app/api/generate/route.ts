@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { DeepSeekBuildScriptError, generateWithDeepSeekBuildScript } from "@/lib/deepseek-build-script-planner";
+import { createAiBuildScriptChat, DeepSeekBuildScriptError, generateWithDeepSeekBuildScript } from "@/lib/deepseek-build-script-planner";
 import { BUILD_SCRIPT_COMPILER_VERSION } from "@/lib/build-script-compiler";
 import { generateStructure, placeStructureInScene } from "@/lib/generator";
 import { promptSeed } from "@/lib/world-planner";
+import { aiProviderLabel, resolveAiConnection } from "@/lib/ai-provider";
 
 export async function POST(request: Request) {
   try {
@@ -10,18 +11,27 @@ export async function POST(request: Request) {
     if (typeof body.prompt !== "string" || !body.prompt.trim()) return NextResponse.json({ error: "A building prompt is required." }, { status: 400 });
     const prompt = body.prompt.trim();
     const seed = promptSeed(prompt);
-    const apiKey = request.headers.get("x-deepseek-api-key")?.trim() || process.env.DEEPSEEK_API_KEY;
-    if (apiKey) {
+    const connection = resolveAiConnection(request);
+    if (connection) {
+      const providerName = aiProviderLabel(connection.provider);
+      const provider = `${connection.provider}-buildscript` as "deepseek-buildscript" | "claude-buildscript";
       try {
-        const result = await generateWithDeepSeekBuildScript(prompt, apiKey);
+        const result = await generateWithDeepSeekBuildScript(prompt, connection.apiKey, {
+          chat: createAiBuildScriptChat(connection.provider, connection.apiKey, {
+            ...(connection.baseUrl ? { baseUrl: connection.baseUrl } : {}),
+            ...(connection.apiMode ? { apiMode: connection.apiMode } : {}),
+            ...(connection.model ? { model: connection.model } : {})
+          }),
+          providerName
+        });
         return NextResponse.json({
           ...result,
-          provider: "deepseek-buildscript",
+          provider,
           fallback: false,
           generationMetadata: {
             prompt,
             seed,
-            provider: "deepseek-buildscript",
+            provider,
             compilerVersion: BUILD_SCRIPT_COMPILER_VERSION,
             buildScript: result.script,
             operationCount: result.stats.operationCount,
@@ -30,9 +40,9 @@ export async function POST(request: Request) {
           }
         });
       } catch (error) {
-        console.error("DeepSeek BuildScript generation failed.", error);
+        console.error(`${providerName} BuildScript generation failed.`, error);
         return NextResponse.json({
-          error: error instanceof Error ? error.message : "DeepSeek BuildScript generation failed.",
+          error: error instanceof Error ? error.message : `${providerName} BuildScript generation failed.`,
           ...(error instanceof DeepSeekBuildScriptError ? { diagnostics: error.diagnostics, attempts: error.attempts } : {})
         }, { status: 422 });
       }

@@ -9,7 +9,7 @@ const materials: Array<[RegExp, BlockId]> = [
   [/(sandstone|砂岩)/i, "minecraft:sandstone"],
   [/(dark oak|深色橡木|深色木)/i, "minecraft:dark_oak_planks"],
   [/(spruce|云杉)/i, "minecraft:spruce_planks"],
-  [/(brick|红砖|砖块)/i, "minecraft:brick"],
+  [/(brick|红砖|砖块)/i, "minecraft:bricks"],
   [/(oak|橡木|木板)/i, "minecraft:oak_planks"]
 ];
 

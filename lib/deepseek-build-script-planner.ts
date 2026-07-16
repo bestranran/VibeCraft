@@ -1,7 +1,9 @@
 import { compileBuildScript } from "./build-script-compiler";
-import { BLOCK_IDS, isBlockId } from "./structure";
+import { BLOCK_IDS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "./structure";
 import type { BuildScript } from "./build-script";
 import type { BuildScriptCompilation } from "./build-script-compiler";
+import { aiProviderLabel, parseAiJson, requestAiText } from "./ai-provider";
+import type { AiApiMode, AiProvider } from "./ai-provider";
 
 type ChatMessage = { role: "system" | "user"; content: string };
 
@@ -39,7 +41,7 @@ export class DeepSeekBuildScriptResponseError extends Error {
 const EXAMPLE_MEDIEVAL = {
   version: 1,
   name: "medieval-cottage",
-  bounds: { width: 64, depth: 64, maxHeight: 64 },
+  bounds: { width: 128, depth: 128, maxHeight: 128 },
   palette: {
     base: "minecraft:cobblestone",
     wall: "minecraft:oak_planks",
@@ -61,7 +63,7 @@ const EXAMPLE_MEDIEVAL = {
 const EXAMPLE_MODERN = {
   version: 1,
   name: "modern-villa",
-  bounds: { width: 64, depth: 64, maxHeight: 64 },
+  bounds: { width: 128, depth: 128, maxHeight: 128 },
   palette: {
     base: "minecraft:stone_bricks",
     wall: "minecraft:gray_concrete",
@@ -80,7 +82,7 @@ const EXAMPLE_MODERN = {
 const EXAMPLE_DESERT = {
   version: 1,
   name: "desert-watchtower",
-  bounds: { width: 64, depth: 64, maxHeight: 64 },
+  bounds: { width: 128, depth: 128, maxHeight: 128 },
   palette: {
     base: "minecraft:red_sandstone",
     wall: "minecraft:sandstone",
@@ -99,23 +101,24 @@ const EXAMPLE_DESERT = {
 export const BUILD_SCRIPT_SYSTEM_PROMPT = `You are the voxel scene planner for VibeCraft Studio. Interpret the user's subject and composition directly. Return one complete BuildScript v1 JSON object and nothing else.
 
 BuildScript root:
-{"version":1,"name":"slug","bounds":{"width":64,"depth":64,"maxHeight":64},"palette":{"primary":"minecraft:stone_bricks"},"operations":[...]}
+{"version":1,"name":"slug","bounds":{"width":128,"depth":128,"maxHeight":128},"palette":{"primary":"minecraft:stone_bricks"},"operations":[...]}
 
 Operations, in dependency order:
 - foundation: {"type":"foundation","id","origin":[x,y,z],"size":[width,height,depth],"material"}. Every origin and size value must be an integer; size values are at least 1.
 - hollowBox: {"type":"hollowBox","id","origin":[x,y,z],"size":[width,height,depth],"wall","floor"?}. Every origin and size value must be an integer; size is at least [3,2,3].
-- cylinder: {"type":"cylinder","id","origin":[centerX,bottomY,centerZ],"radius":1..16,"height":1..64,"material","hollow"?}
-- gableRoof: {"type":"gableRoof","id","target":"earlier hollowBox id","height":1..32,"overhang":0..8,"material","ridgeAxis":"x|z"?}
-- flatRoof: {"type":"flatRoof","id","target":"earlier hollowBox id","overhang":0..8,"thickness":1..4,"material"}
-- entrance: {"type":"entrance","id","target":"earlier hollowBox id","side":"front|back|left|right","width":1..4,"height":2..5,"offset"?}. The target hollowBox must be at least 4 blocks high. Entrance height must also be at most the target hollowBox size[1] minus 2, leaving a wall block above. Omit offset for a centered entrance unless the user explicitly requests an asymmetric entrance.
-- windows: {"type":"windows","id","target":"earlier hollowBox id","side":"front|back|left|right|all","count":1..12,"width":1..3,"height":1..3,"sillHeight":1..32,"material"}
-- porch: {"type":"porch","id","target":"earlier hollowBox id","side":"front|back|left|right","width":1..16,"depth":1..8,"material"}
-- path: {"type":"path","id","target":"earlier entrance id","length":2..24,"width":1..5,"material"}
-- copyMirror: {"type":"copyMirror","id","target":"earlier component id","mode":"copy","offset":[dx,dy,dz]} or {"type":"copyMirror","id","target","mode":"mirror","axis":"x|z","pivot":0..63}
+- cylinder: {"type":"cylinder","id","origin":[centerX,bottomY,centerZ],"radius":1..32,"height":1..128,"material","hollow"?}
+- gableRoof: {"type":"gableRoof","id","target":"earlier hollowBox id","height":1..64,"overhang":0..16,"material","ridgeAxis":"x|z"?}
+- flatRoof: {"type":"flatRoof","id","target":"earlier hollowBox id","overhang":0..16,"thickness":1..8,"material"}
+- entrance: {"type":"entrance","id","target":"earlier hollowBox id","side":"front|back|left|right","width":1..8,"height":2..10,"offset"?}. The target hollowBox must be at least 4 blocks high. Entrance height must also be at most the target hollowBox size[1] minus 2, leaving a wall block above. Omit offset for a centered entrance unless the user explicitly requests an asymmetric entrance.
+- windows: {"type":"windows","id","target":"earlier hollowBox id","side":"front|back|left|right|all","count":1..24,"width":1..6,"height":1..6,"sillHeight":1..64,"material"}
+- porch: {"type":"porch","id","target":"earlier hollowBox id","side":"front|back|left|right","width":1..32,"depth":1..16,"material"}
+- path: {"type":"path","id","target":"earlier entrance id","length":2..48,"width":1..10,"material"}
+- copyMirror: {"type":"copyMirror","id","target":"earlier component id","mode":"copy","offset":[dx,dy,dz]} or {"type":"copyMirror","id","target","mode":"mirror","axis":"x|z","pivot":0..127}
 
 Rules:
-1. Use exactly 64x64x64 bounds. Materials must be lowercase vanilla block IDs in the form minecraft:block_name. Common examples: ${BLOCK_IDS.join(", ")}.
-2. Keep all geometry, including roof overhangs, porches, paths, copies, and mirrors, inside x/z 0..63 and y 0..63.
+1. Use exactly 128x128x128 bounds. Materials must be real Minecraft Java 1.20.1 block IDs in the form minecraft:block_name. The complete supported occupied-block registry is listed below. Choose freely from it according to the user's request; the list is not a recommendation or ranking, and there is no required minimum or maximum palette size.
+Available material IDs (${BLOCK_IDS.length} total): ${BLOCK_IDS.join(", ")}.
+2. Keep all geometry, including roof overhangs, porches, paths, copies, and mirrors, inside x/z 0..127 and y 0..127. Center the main composition near x/z 64.
 3. Decide the subject, silhouette, grounding, symmetry, and operation mix from the user's request. A hollowBox is just a hollow rectangular volume; it does not imply a house.
 4. Entrances, windows, porches, paths, and roofs are optional. Use them only when they belong to the requested subject. Do not add a door to a robot, fountain, statue, vehicle, tree, or other non-building unless the user asks for one.
 5. Add referenced operations after their targets. Use enough operations for a recognizable silhouette and stay comfortably below 100,000 blocks.
@@ -183,14 +186,14 @@ function normalizeEntrances(value: unknown): unknown {
       const target = boxes.get(operation.target);
       if (!target) continue;
       const available = operation.side === "left" || operation.side === "right" ? target.depth - 2 : target.width - 2;
-      if (available >= 1) operation.width = Math.min(typeof operation.width === "number" ? operation.width : 2, available, 4);
+      if (available >= 1) operation.width = Math.min(typeof operation.width === "number" ? operation.width : 2, available, 8);
       if (target.height < 4 && Array.isArray(target.operation.size)) {
         const size = [...target.operation.size];
         size[1] = 4;
         target.operation.size = size;
         target.height = 4;
       }
-      const maximumHeight = Math.min(target.height - 2, 5);
+      const maximumHeight = Math.min(target.height - 2, 10);
       if (maximumHeight >= 2) operation.height = Math.min(typeof operation.height === "number" ? operation.height : 3, maximumHeight);
       delete operation.offset;
     }
@@ -214,10 +217,73 @@ function normalizeBoxCoordinates(value: unknown): unknown {
     const operation = item as Record<string, unknown>;
     if ((operation.type !== "foundation" && operation.type !== "hollowBox") || !Array.isArray(operation.origin) || !Array.isArray(operation.size) || operation.origin.length !== 3 || operation.size.length !== 3) continue;
     const minimumSize = operation.type === "hollowBox" ? [3, 2, 3] : [1, 1, 1];
-    const origin = operation.origin.map((coordinate, axis) => normalizedInteger(coordinate, 0, 0, 64 - minimumSize[axis]));
-    const size = operation.size.map((dimension, axis) => normalizedInteger(dimension, minimumSize[axis], minimumSize[axis], 64 - origin[axis]));
+    const origin = operation.origin.map((coordinate, axis) => normalizedInteger(coordinate, 0, 0, SCENE_SIZE - minimumSize[axis]));
+    const size = operation.size.map((dimension, axis) => normalizedInteger(dimension, minimumSize[axis], minimumSize[axis], SCENE_SIZE - origin[axis]));
     operation.origin = origin;
     operation.size = size;
+  }
+  return script;
+}
+
+function normalizeOperationNumbers(value: unknown): unknown {
+  const candidate = candidateFromResponse(value);
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
+  const script = structuredClone(candidate) as Record<string, unknown>;
+  if (!Array.isArray(script.operations)) return script;
+  const normalizeField = (
+    operation: Record<string, unknown>,
+    field: string,
+    fallback: number,
+    minimum: number,
+    maximum: number,
+    required = false,
+  ) => {
+    if (required || operation[field] !== undefined) {
+      operation[field] = normalizedInteger(operation[field], fallback, minimum, maximum);
+    }
+  };
+  for (const item of script.operations) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const operation = item as Record<string, unknown>;
+    switch (operation.type) {
+      case "cylinder":
+        normalizeField(operation, "radius", 4, 1, 32, true);
+        normalizeField(operation, "height", 6, 1, SCENE_SIZE, true);
+        break;
+      case "gableRoof":
+        normalizeField(operation, "height", 3, 1, 64, true);
+        normalizeField(operation, "overhang", 0, 0, 16);
+        break;
+      case "flatRoof":
+        normalizeField(operation, "overhang", 0, 0, 16);
+        normalizeField(operation, "thickness", 1, 1, 8);
+        break;
+      case "entrance":
+        normalizeField(operation, "width", 2, 1, 8);
+        normalizeField(operation, "height", 3, 2, 10);
+        normalizeField(operation, "offset", 0, -32, 32);
+        break;
+      case "windows":
+        normalizeField(operation, "count", 2, 1, 24, true);
+        normalizeField(operation, "width", 1, 1, 6);
+        normalizeField(operation, "height", 2, 1, 6);
+        normalizeField(operation, "sillHeight", 2, 1, 64);
+        break;
+      case "porch":
+        normalizeField(operation, "width", 4, 1, 32, true);
+        normalizeField(operation, "depth", 2, 1, 16, true);
+        break;
+      case "path":
+        normalizeField(operation, "length", 8, 2, 48, true);
+        normalizeField(operation, "width", 2, 1, 10, true);
+        break;
+      case "copyMirror":
+        if (operation.mode === "mirror") normalizeField(operation, "pivot", 64, 0, SCENE_MAX_COORDINATE, true);
+        if (operation.mode === "copy" && Array.isArray(operation.offset) && operation.offset.length === 3) {
+          operation.offset = operation.offset.map((coordinate) => normalizedInteger(coordinate, 0, -SCENE_MAX_COORDINATE, SCENE_MAX_COORDINATE));
+        }
+        break;
+    }
   }
   return script;
 }
@@ -251,32 +317,32 @@ export function createDeepSeekBuildScriptChat(
   apiKey: string,
   options: { baseUrl?: string; model?: string; fetch?: typeof fetch } = {}
 ): DeepSeekBuildScriptChat {
-  const request = options.fetch ?? fetch;
-  const baseUrl = (options.baseUrl ?? process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, "");
-  const model = options.model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+  return createAiBuildScriptChat("deepseek", apiKey, options);
+}
+
+export function createAiBuildScriptChat(
+  provider: AiProvider,
+  apiKey: string,
+  options: { baseUrl?: string; model?: string; apiMode?: AiApiMode; fetch?: typeof fetch } = {}
+): DeepSeekBuildScriptChat {
+  const providerName = aiProviderLabel(provider);
   return async ({ messages, temperature, maxTokens }) => {
-    const response = await request(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, response_format: { type: "json_object" }, messages }),
-      signal: AbortSignal.timeout(60_000)
+    const content = await requestAiText({
+      provider,
+      apiKey,
+      messages,
+      temperature,
+      maxTokens,
+      ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
+      ...(options.model ? { model: options.model } : {}),
+      ...(options.apiMode ? { apiMode: options.apiMode } : {}),
+      ...(options.fetch ? { fetch: options.fetch } : {}),
+      timeoutMs: 60_000
     });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`DeepSeek BuildScript request failed (${response.status}): ${detail.slice(0, 200)}`);
-    }
-    const data = await response.json() as { choices?: Array<{ finish_reason?: string; message?: { content?: string } }> };
-    const choice = data.choices?.[0];
-    if (choice?.finish_reason === "length") throw new DeepSeekBuildScriptResponseError("DeepSeek truncated the BuildScript response.");
-    const content = choice?.message?.content;
-    if (!content) throw new DeepSeekBuildScriptResponseError("DeepSeek returned an empty BuildScript response.");
-    const normalized = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-    const start = normalized.indexOf("{");
-    const end = normalized.lastIndexOf("}");
     try {
-      return JSON.parse(start >= 0 && end > start ? normalized.slice(start, end + 1) : normalized) as unknown;
+      return parseAiJson(content);
     } catch {
-      throw new DeepSeekBuildScriptResponseError("DeepSeek returned malformed BuildScript JSON.");
+      throw new DeepSeekBuildScriptResponseError(`${providerName} returned malformed BuildScript JSON.`);
     }
   };
 }
@@ -284,9 +350,10 @@ export function createDeepSeekBuildScriptChat(
 export async function generateWithDeepSeekBuildScript(
   prompt: string,
   apiKey: string,
-  options: { chat?: DeepSeekBuildScriptChat } = {}
+  options: { chat?: DeepSeekBuildScriptChat; providerName?: string } = {}
 ): Promise<DeepSeekBuildScriptResult> {
   const chat = options.chat ?? createDeepSeekBuildScriptChat(apiKey);
+  const providerName = options.providerName ?? "DeepSeek";
   let firstCandidate: unknown;
   let first: ReturnType<typeof evaluateCandidate>;
   try {
@@ -317,7 +384,7 @@ export async function generateWithDeepSeekBuildScript(
     });
   } catch (error) {
     throw new DeepSeekBuildScriptError(
-      error instanceof Error ? error.message : "DeepSeek BuildScript repair request failed.",
+      error instanceof Error ? error.message : `${providerName} BuildScript repair request failed.`,
       2,
       first.diagnostics
     );
@@ -331,6 +398,16 @@ export async function generateWithDeepSeekBuildScript(
     );
     if (palettePlaceholderOnly) {
       localCandidate = removePalettePlaceholder(localCandidate);
+      localResult = evaluateCandidate(localCandidate);
+      if (localResult.compilation) {
+        return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
+      }
+    }
+    const operationNumbersOnly = localResult.diagnostics.length > 0 && localResult.diagnostics.every((diagnostic) =>
+      /^operations\[\d+\]\.(?:radius|height|overhang|thickness|width|offset|count|sillHeight|depth|length|pivot)(?:\[\d\])? must be an integer from /.test(diagnostic)
+    );
+    if (operationNumbersOnly) {
+      localCandidate = normalizeOperationNumbers(localCandidate);
       localResult = evaluateCandidate(localCandidate);
       if (localResult.compilation) {
         return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
@@ -358,7 +435,7 @@ export async function generateWithDeepSeekBuildScript(
       }
     }
     throw new DeepSeekBuildScriptError(
-      `DeepSeek returned an invalid BuildScript after one repair attempt: ${localResult.diagnostics.join(" ")}`,
+      `${providerName} returned an invalid BuildScript after one repair attempt: ${localResult.diagnostics.join(" ")}`,
       2,
       localResult.diagnostics
     );
