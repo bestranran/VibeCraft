@@ -15,9 +15,14 @@ type VoxelCanvasProps = {
   pendingEdit?: PendingEdit | null;
 };
 
+const EMPTY_GRID_OFFSETS = Array.from({ length: 57 }, (_, index) => -900 + index * 32);
+
 export function VoxelCanvas({ structure, pendingEdit }: VoxelCanvasProps) {
   const { resolved } = useTheme();
   const themeColors = useMemo(() => readCanvasTheme(resolved), [resolved]);
+  if (structure.blocks.length === 0 && !pendingEdit) {
+    return <EmptyCanvasFloor />;
+  }
   return (
     <Canvas
       shadows
@@ -192,6 +197,38 @@ function GridFloor({ colors }: { colors: CanvasTheme }) {
         <meshStandardMaterial color={colors.floor} roughness={1} />
       </mesh>
     </group>
+  );
+}
+
+function EmptyCanvasFloor() {
+  return (
+    <div
+      className="relative h-full min-h-full w-full overflow-hidden"
+      style={{ background: "radial-gradient(circle at 50% 42%, var(--canvas-gradient-center) 0%, var(--canvas-background) 56%, var(--canvas-gradient-edge) 100%)" }}
+      aria-hidden
+    >
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 800 710" preserveAspectRatio="none" fill="none">
+        <defs>
+          <clipPath id="studio-empty-floor-clip">
+            <polygon points="400,382 820,550 400,718 -20,550" />
+          </clipPath>
+          <radialGradient id="studio-empty-floor-shadow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(400 600) scale(238 94)">
+            <stop stopColor="var(--canvas-grid-major)" stopOpacity="0.34" />
+            <stop offset="0.72" stopColor="var(--canvas-grid-minor)" stopOpacity="0.12" />
+            <stop offset="1" stopColor="var(--canvas-background)" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <ellipse cx="400" cy="600" rx="238" ry="94" fill="url(#studio-empty-floor-shadow)" />
+        <g clipPath="url(#studio-empty-floor-clip)" stroke="var(--canvas-grid-minor)" strokeWidth="1" opacity="0.62">
+          {EMPTY_GRID_OFFSETS.map((offset) => (
+            <line key={`r-${offset}`} x1={offset} y1="250" x2={offset + 1200} y2="730" />
+          ))}
+          {EMPTY_GRID_OFFSETS.map((offset) => (
+            <line key={`l-${offset}`} x1={offset} y1="730" x2={offset + 1200} y2="250" />
+          ))}
+        </g>
+      </svg>
+    </div>
   );
 }
 
