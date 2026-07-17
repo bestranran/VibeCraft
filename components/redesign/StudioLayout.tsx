@@ -57,19 +57,17 @@ function ProjectBadge({ title, isGenerated }: { title: string; isGenerated: bool
 
 function EmptyHint({ title, description }: { title: string; description: string }) {
   const { colors, resolved } = useTheme();
-  const strokeA = resolved === "dark" ? "rgba(255,255,255,0.22)" : "var(--border-strong)";
-  const fillA = resolved === "dark" ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.18)";
-  const strokeB = resolved === "dark" ? "rgba(255,255,255,0.16)" : "color-mix(in srgb, var(--border-strong) 82%, transparent)";
-  const strokeC = resolved === "dark" ? "rgba(255,255,255,0.13)" : "color-mix(in srgb, var(--border-strong) 68%, transparent)";
+  const cubeColor = resolved === "dark" ? "rgba(255,255,255,0.28)" : "#b8cbcd";
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="flex flex-col items-center gap-4 text-center">
-        <motion.div className="relative z-20" animate={{ opacity: [0.82, 1, 0.82] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
-          <svg width="76" height="68" viewBox="0 0 64 56" fill="none" aria-hidden>
-            <path d="M32 2L62 18V38L32 54L2 38V18L32 2Z" stroke={strokeA} strokeWidth="1.5" fill={fillA} />
-            <path d="M32 2L62 18L32 34L2 18Z" fill={fillA} stroke={strokeB} strokeWidth="1" />
-            <path d="M32 34V54M32 34L2 18M32 34L62 18" stroke={strokeC} strokeWidth="1" />
-          </svg>
+        <motion.div
+          className="relative z-20 flex h-[68px] w-[76px] items-center justify-center"
+          animate={{ opacity: [0.88, 1, 0.88] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          style={{ color: cubeColor }}
+        >
+          <Cuboid width={76} height={68} strokeWidth={1.15} aria-hidden />
         </motion.div>
         <div className="flex flex-col gap-1.5">
           <p style={{ color: colors.textMuted, fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, letterSpacing: "0.02em", transition: "color 0.15s" }}>{title}</p>
