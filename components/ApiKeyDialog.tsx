@@ -12,12 +12,14 @@ type ApiKeyDialogProps = {
   initialBaseUrl: string;
   initialApiMode: AiApiMode;
   initialModel: string;
+  unlimitedBlocks: boolean;
+  onUnlimitedBlocksChange: () => void;
   onSave: (provider: AiProvider, apiKey: string, baseUrl: string, apiMode: AiApiMode, model: string) => void;
   onClose: () => void;
 };
 
-export function ApiKeyDialog({ open, initialProvider, initialValue, initialBaseUrl, initialApiMode, initialModel, onSave, onClose }: ApiKeyDialogProps) {
-  const { t } = useI18n();
+export function ApiKeyDialog({ open, initialProvider, initialValue, initialBaseUrl, initialApiMode, initialModel, unlimitedBlocks, onUnlimitedBlocksChange, onSave, onClose }: ApiKeyDialogProps) {
+  const { locale, t } = useI18n();
   const [provider, setProvider] = useState<AiProvider>(initialProvider);
   const [apiKey, setApiKey] = useState(initialValue);
   const [baseUrl, setBaseUrl] = useState(initialBaseUrl);
@@ -120,6 +122,27 @@ export function ApiKeyDialog({ open, initialProvider, initialValue, initialBaseU
             )}
           </div>
         )}
+
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-secondary)] p-3">
+          <div className="min-w-0">
+            <p className="studio-field-label">{locale === "zh-CN" ? "方块数量限制" : "Block limit"}</p>
+            <p className="studio-muted-copy">{t(unlimitedBlocks ? "canvas.unlimitedBlocksOn" : "canvas.unlimitedBlocksOff")}</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={unlimitedBlocks}
+            aria-label={t(unlimitedBlocks ? "canvas.unlimitedBlocksOn" : "canvas.unlimitedBlocksOff")}
+            onClick={onUnlimitedBlocksChange}
+            className="relative h-6 w-11 shrink-0 rounded-full border-0 p-0 transition-colors"
+            style={{ background: unlimitedBlocks ? "var(--accent-primary)" : "var(--border-strong)" }}
+          >
+            <span
+              className="absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform"
+              style={{ left: 3, transform: unlimitedBlocks ? "translateX(20px)" : "translateX(0)" }}
+            />
+          </button>
+        </div>
 
         <div className="mt-5 flex justify-end gap-2">
           {initialValue && <button type="button" onClick={() => onSave(provider, "", baseUrl.trim(), apiMode, model.trim())} className="studio-button">{t("dialog.removeKey")}</button>}

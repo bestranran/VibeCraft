@@ -91,6 +91,8 @@ export const en = {
   "canvas.blocks.other": "{count} blocks in scene",
   "canvas.deepSeekSettings": "DeepSeek settings",
   "canvas.aiSettings": "AI provider settings",
+  "canvas.unlimitedBlocksOff": "Remove the 100,000-block limit (up to the 128³ scene limit)",
+  "canvas.unlimitedBlocksOn": "100,000-block limit removed; click to restore the limit",
   "canvas.undo": "Undo",
   "canvas.redo": "Redo",
   "canvas.exportSchematic": "Export WorldEdit schematic",

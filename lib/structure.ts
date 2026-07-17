@@ -6,6 +6,7 @@ export type BlockId = MinecraftBlockId;
 
 export const SCENE_SIZE = 128 as const;
 export const SCENE_MAX_COORDINATE = SCENE_SIZE - 1;
+export const MAX_SCENE_BLOCKS = SCENE_SIZE ** 3;
 export const MAX_STRUCTURE_BLOCKS = 100_000;
 export const MAX_VISITED_COORDINATES = 800_000;
 

@@ -40,6 +40,7 @@ export function StudioShell() {
   const [aiBaseUrl, setAiBaseUrl] = useState("");
   const [aiApiMode, setAiApiMode] = useState<AiApiMode>("anthropic");
   const [aiModel, setAiModel] = useState("claude-opus-4-8");
+  const [unlimitedBlocks, setUnlimitedBlocks] = useState(false);
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [generateLoading, setGenerateLoading] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -82,11 +83,13 @@ export function StudioShell() {
     const savedBaseUrl = window.sessionStorage.getItem("vibecraft.aiBaseUrl") || "";
     const savedApiMode = window.sessionStorage.getItem("vibecraft.aiApiMode") === "openai-compatible" ? "openai-compatible" : "anthropic";
     const savedModel = window.sessionStorage.getItem("vibecraft.aiModel") || "claude-opus-4-8";
+    const savedUnlimitedBlocks = window.sessionStorage.getItem("vibecraft.unlimitedBlocks") === "true";
     setAiProvider(savedProvider);
     setAiApiKey(savedKey);
     setAiBaseUrl(savedBaseUrl);
     setAiApiMode(savedApiMode);
     setAiModel(savedModel);
+    setUnlimitedBlocks(savedUnlimitedBlocks);
     setPlannerLabel(savedKey ? t(aiLabelKey(savedProvider)) : t("edit.localPlanner"));
     if (!window.sessionStorage.getItem("vibecraft.aiPromptSeen") && !window.sessionStorage.getItem("vibecraft.deepseekPromptSeen")) {
       window.sessionStorage.setItem("vibecraft.aiPromptSeen", "true");
@@ -156,6 +159,14 @@ export function StudioShell() {
     setKeyDialogOpen(false);
   }
 
+  function toggleUnlimitedBlocks() {
+    setUnlimitedBlocks((current) => {
+      const next = !current;
+      window.sessionStorage.setItem("vibecraft.unlimitedBlocks", String(next));
+      return next;
+    });
+  }
+
   async function handlePlanDistrict(seed?: number) {
     const visibleCommand = prompt.trim();
     if (!visibleCommand || planLoading) return;
@@ -187,7 +198,7 @@ export function StudioShell() {
     setGenerateError(null);
     setGenerateInfo(null);
     try {
-      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", "Accept-Language": locale, ...aiHeaders() }, body: JSON.stringify({ prompt: command }) });
+      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json", "Accept-Language": locale, ...aiHeaders() }, body: JSON.stringify({ prompt: command, unlimitedBlocks }) });
       const payload = await response.json() as {
         structure?: VoxelStructure;
         provider?: string;
@@ -393,7 +404,7 @@ export function StudioShell() {
           />
         ) : null}
       />
-      <ApiKeyDialog open={keyDialogOpen} initialProvider={aiProvider} initialValue={aiApiKey} initialBaseUrl={aiBaseUrl} initialApiMode={aiApiMode} initialModel={aiModel} onSave={saveAiConnection} onClose={() => setKeyDialogOpen(false)} />
+      <ApiKeyDialog open={keyDialogOpen} initialProvider={aiProvider} initialValue={aiApiKey} initialBaseUrl={aiBaseUrl} initialApiMode={aiApiMode} initialModel={aiModel} unlimitedBlocks={unlimitedBlocks} onUnlimitedBlocksChange={toggleUnlimitedBlocks} onSave={saveAiConnection} onClose={() => setKeyDialogOpen(false)} />
     </>
   );
 }

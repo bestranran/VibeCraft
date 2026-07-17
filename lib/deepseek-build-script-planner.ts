@@ -1,6 +1,6 @@
 import { compileBuildScript } from "./build-script-compiler";
-import { BLOCK_IDS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "./structure";
-import type { BuildScript } from "./build-script";
+import { BLOCK_IDS, MAX_SCENE_BLOCKS, MAX_VISITED_COORDINATES, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "./structure";
+import type { BuildScript, BuildScriptBudgets } from "./build-script";
 import type { BuildScriptCompilation } from "./build-script-compiler";
 import { aiProviderLabel, parseAiJson, requestAiText } from "./ai-provider";
 import type { AiApiMode, AiProvider } from "./ai-provider";
@@ -17,6 +17,12 @@ export type DeepSeekBuildScriptResult = BuildScriptCompilation & {
   summary: string;
   attempts: 1 | 2;
   repaired: boolean;
+};
+
+const BUILD_SCRIPT_MAX_TOKENS = 8192;
+const UNLIMITED_BLOCK_BUDGETS: Partial<BuildScriptBudgets> = {
+  maxChangedBlocks: MAX_SCENE_BLOCKS,
+  maxCoordinates: Math.max(MAX_VISITED_COORDINATES, MAX_SCENE_BLOCKS * 4)
 };
 
 export class DeepSeekBuildScriptError extends Error {
@@ -121,8 +127,13 @@ Available material IDs (${BLOCK_IDS.length} total): ${BLOCK_IDS.join(", ")}.
 2. Keep all geometry, including roof overhangs, porches, paths, copies, and mirrors, inside x/z 0..127 and y 0..127. Center the main composition near x/z 64.
 3. Decide the subject, silhouette, grounding, symmetry, and operation mix from the user's request. A hollowBox is just a hollow rectangular volume; it does not imply a house.
 4. Entrances, windows, porches, paths, and roofs are optional. Use them only when they belong to the requested subject. Do not add a door to a robot, fountain, statue, vehicle, tree, or other non-building unless the user asks for one.
-5. Add referenced operations after their targets. Use enough operations for a recognizable silhouette and stay comfortably below 100,000 blocks.
+5. Add referenced operations after their targets. Use enough operations for a recognizable silhouette and stay comfortably below 100,000 blocks. Keep the JSON compact and prefer fewer than 40 operations by using larger primitives, copyMirror, and repeated features instead of enumerating small parts.
 6. Preserve intentional floating or separated parts when the subject calls for them. Express the request through geometry and proportions, not by forcing it into a building template.`;
+
+const UNLIMITED_BLOCK_SYSTEM_PROMPT = BUILD_SCRIPT_SYSTEM_PROMPT.replace(
+  "stay comfortably below 100,000 blocks",
+  `you may use the full ${SCENE_SIZE}x${SCENE_SIZE}x${SCENE_SIZE} scene, up to ${MAX_SCENE_BLOCKS.toLocaleString("en-US")} occupied blocks`
+);
 
 function candidateFromResponse(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -137,9 +148,9 @@ function failureDiagnostics(error: unknown): string[] {
   return [error instanceof Error ? error.message : "Unknown BuildScript validation failure."];
 }
 
-function evaluateCandidate(value: unknown): { compilation?: BuildScriptCompilation; diagnostics: string[] } {
+function evaluateCandidate(value: unknown, budgetOverrides: Partial<BuildScriptBudgets> = {}): { compilation?: BuildScriptCompilation; diagnostics: string[] } {
   try {
-    const compilation = compileBuildScript(candidateFromResponse(value));
+    const compilation = compileBuildScript(candidateFromResponse(value), budgetOverrides);
     const diagnostics = compilation.validation.diagnostics
       .filter((diagnostic) => diagnostic.severity === "error")
       .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`);
@@ -288,14 +299,12 @@ function normalizeOperationNumbers(value: unknown): unknown {
   return script;
 }
 
-function removePalettePlaceholder(value: unknown): unknown {
+function normalizeInvalidMaterials(value: unknown): unknown {
   const candidate = candidateFromResponse(value);
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return candidate;
   const script = structuredClone(candidate) as Record<string, unknown>;
   if (!script.palette || typeof script.palette !== "object" || Array.isArray(script.palette) || !Array.isArray(script.operations)) return script;
   const palette = script.palette as Record<string, unknown>;
-  const placeholderKeys = Object.keys(palette).filter((key) => palette[key] === "minecraft:block_id");
-  if (!placeholderKeys.length) return script;
   const materialFields = ["material", "wall", "floor"];
   const referencedMaterials = script.operations.flatMap((item) => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
@@ -305,11 +314,27 @@ function removePalettePlaceholder(value: unknown): unknown {
   const fallback = Object.values(palette).find((material): material is string => typeof material === "string" && isBlockId(material))
     ?? referencedMaterials.find((material) => isBlockId(material))
     ?? "minecraft:stone_bricks";
-  for (const key of placeholderKeys) {
+  const invalidKeys = Object.keys(palette).filter((key) => {
+    const material = palette[key];
+    return typeof material !== "string" || !isBlockId(material);
+  });
+  for (const key of invalidKeys) {
     if (referencedMaterials.includes(key)) palette[key] = fallback;
     else delete palette[key];
   }
   if (!Object.keys(palette).length) palette.primary = fallback;
+  for (const item of script.operations) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const operation = item as Record<string, unknown>;
+    for (const field of materialFields) {
+      if (!(field in operation)) continue;
+      const material = operation[field];
+      const isDirectBlock = typeof material === "string" && isBlockId(material);
+      const paletteValue = typeof material === "string" ? palette[material] : undefined;
+      const isPaletteReference = typeof paletteValue === "string" && isBlockId(paletteValue);
+      if (!isDirectBlock && !isPaletteReference) operation[field] = fallback;
+    }
+  }
   return script;
 }
 
@@ -350,19 +375,21 @@ export function createAiBuildScriptChat(
 export async function generateWithDeepSeekBuildScript(
   prompt: string,
   apiKey: string,
-  options: { chat?: DeepSeekBuildScriptChat; providerName?: string } = {}
+  options: { chat?: DeepSeekBuildScriptChat; providerName?: string; unlimitedBlocks?: boolean } = {}
 ): Promise<DeepSeekBuildScriptResult> {
   const chat = options.chat ?? createDeepSeekBuildScriptChat(apiKey);
   const providerName = options.providerName ?? "DeepSeek";
+  const budgetOverrides = options.unlimitedBlocks ? UNLIMITED_BLOCK_BUDGETS : {};
+  const systemPrompt = options.unlimitedBlocks ? UNLIMITED_BLOCK_SYSTEM_PROMPT : BUILD_SCRIPT_SYSTEM_PROMPT;
   let firstCandidate: unknown;
   let first: ReturnType<typeof evaluateCandidate>;
   try {
     firstCandidate = await chat({
-      messages: [{ role: "system", content: BUILD_SCRIPT_SYSTEM_PROMPT }, { role: "user", content: prompt }],
+      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: prompt }],
       temperature: 0.35,
-      maxTokens: 4096
+      maxTokens: BUILD_SCRIPT_MAX_TOKENS
     });
-    first = evaluateCandidate(firstCandidate);
+    first = evaluateCandidate(firstCandidate, budgetOverrides);
   } catch (error) {
     if (!(error instanceof DeepSeekBuildScriptResponseError)) throw error;
     firstCandidate = null;
@@ -376,11 +403,11 @@ export async function generateWithDeepSeekBuildScript(
   try {
     repairedCandidate = await chat({
       messages: [
-        { role: "system", content: BUILD_SCRIPT_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: repairPrompt(prompt, candidateFromResponse(firstCandidate), first.diagnostics) }
       ],
       temperature: 0.05,
-      maxTokens: 4096
+      maxTokens: BUILD_SCRIPT_MAX_TOKENS
     });
   } catch (error) {
     throw new DeepSeekBuildScriptError(
@@ -389,16 +416,17 @@ export async function generateWithDeepSeekBuildScript(
       first.diagnostics
     );
   }
-  const repaired = evaluateCandidate(repairedCandidate);
+  const repaired = evaluateCandidate(repairedCandidate, budgetOverrides);
   if (!repaired.compilation) {
     let localCandidate = repairedCandidate;
     let localResult = repaired;
-    const palettePlaceholderOnly = localResult.diagnostics.length > 0 && localResult.diagnostics.every((diagnostic) =>
-      /^palette\.[a-z0-9_-]+ is not a supported Minecraft block ID\.$/i.test(diagnostic)
+    const materialIssuesOnly = localResult.diagnostics.length > 0 && localResult.diagnostics.every((diagnostic) =>
+      /^palette\.[a-z0-9_-]+ is not a supported Minecraft block ID\.$/i.test(diagnostic) ||
+      /^operations\[\d+\]\.(?:material|wall|floor) (?:must be a palette key or supported Minecraft block ID\.|references unknown material )/i.test(diagnostic)
     );
-    if (palettePlaceholderOnly) {
-      localCandidate = removePalettePlaceholder(localCandidate);
-      localResult = evaluateCandidate(localCandidate);
+    if (materialIssuesOnly) {
+      localCandidate = normalizeInvalidMaterials(localCandidate);
+      localResult = evaluateCandidate(localCandidate, budgetOverrides);
       if (localResult.compilation) {
         return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
       }
@@ -408,7 +436,7 @@ export async function generateWithDeepSeekBuildScript(
     );
     if (operationNumbersOnly) {
       localCandidate = normalizeOperationNumbers(localCandidate);
-      localResult = evaluateCandidate(localCandidate);
+      localResult = evaluateCandidate(localCandidate, budgetOverrides);
       if (localResult.compilation) {
         return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
       }
@@ -418,7 +446,7 @@ export async function generateWithDeepSeekBuildScript(
     );
     if (boxCoordinatesOnly) {
       localCandidate = normalizeBoxCoordinates(localCandidate);
-      localResult = evaluateCandidate(localCandidate);
+      localResult = evaluateCandidate(localCandidate, budgetOverrides);
       if (localResult.compilation) {
         return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
       }
@@ -429,7 +457,7 @@ export async function generateWithDeepSeekBuildScript(
     );
     if (entranceDimensionsOnly) {
       localCandidate = normalizeEntrances(localCandidate);
-      localResult = evaluateCandidate(localCandidate);
+      localResult = evaluateCandidate(localCandidate, budgetOverrides);
       if (localResult.compilation) {
         return { ...localResult.compilation, summary: localResult.compilation.script.name, attempts: 2, repaired: true };
       }

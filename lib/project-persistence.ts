@@ -1,7 +1,7 @@
 import { validateBuildScript } from "./build-script";
 import { validateBuildingOperations } from "./operation-validation";
 import { calculateStructureSize, coordinateKey, invertPatch, normalizeStructure } from "./patches";
-import { MAX_STRUCTURE_BLOCKS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "./structure";
+import { MAX_SCENE_BLOCKS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "./structure";
 import type {
   BlockChange,
   Box3D,
@@ -248,7 +248,7 @@ function parseChange(value: unknown, field: string): BlockChange {
 
 function parseStructure(value: unknown, field: string): VoxelStructure {
   const raw = record(value, field);
-  if (typeof raw.name !== "string" || !raw.name || !Array.isArray(raw.size) || raw.size.length !== 3 || !raw.size.every(Number.isInteger) || !Array.isArray(raw.blocks) || raw.blocks.length > MAX_STRUCTURE_BLOCKS) {
+  if (typeof raw.name !== "string" || !raw.name || !Array.isArray(raw.size) || raw.size.length !== 3 || !raw.size.every(Number.isInteger) || !Array.isArray(raw.blocks) || raw.blocks.length > MAX_SCENE_BLOCKS) {
     throw new ProjectPersistenceError(`${field} is invalid.`);
   }
   const seen = new Set<string>();

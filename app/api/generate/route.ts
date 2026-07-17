@@ -7,9 +7,11 @@ import { aiProviderLabel, resolveAiConnection } from "@/lib/ai-provider";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { prompt?: unknown };
+    const body = await request.json() as { prompt?: unknown; unlimitedBlocks?: unknown };
     if (typeof body.prompt !== "string" || !body.prompt.trim()) return NextResponse.json({ error: "A building prompt is required." }, { status: 400 });
+    if (body.unlimitedBlocks !== undefined && typeof body.unlimitedBlocks !== "boolean") return NextResponse.json({ error: "unlimitedBlocks must be a boolean." }, { status: 400 });
     const prompt = body.prompt.trim();
+    const unlimitedBlocks = body.unlimitedBlocks === true;
     const seed = promptSeed(prompt);
     const connection = resolveAiConnection(request);
     if (connection) {
@@ -22,12 +24,14 @@ export async function POST(request: Request) {
             ...(connection.apiMode ? { apiMode: connection.apiMode } : {}),
             ...(connection.model ? { model: connection.model } : {})
           }),
-          providerName
+          providerName,
+          unlimitedBlocks
         });
         return NextResponse.json({
           ...result,
           provider,
           fallback: false,
+          unlimitedBlocks,
           generationMetadata: {
             prompt,
             seed,

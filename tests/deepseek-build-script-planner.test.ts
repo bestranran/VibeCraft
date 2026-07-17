@@ -64,8 +64,26 @@ test("a hollow volume without an entrance is accepted when the model chooses it"
   assert.equal(result.attempts, 1);
   assert.equal(result.repaired, false);
   assert.equal(result.script.name, "doorless-volume");
+  assert.equal(requests[0].maxTokens, 8192);
   assert.doesNotMatch(requests[0].messages[0].content, /Every hollowBox must have an entrance/);
   assert.match(requests[0].messages[0].content, /does not imply a house/);
+  assert.match(requests[0].messages[0].content, /Keep the JSON compact/);
+});
+
+test("unlimited mode removes the 100,000-block generation budget", async () => {
+  const large = validScript("large-foundation");
+  large.operations = [
+    { type: "foundation", id: "large-base", origin: [0, 0, 0], size: [128, 7, 128], material: "base" }
+  ];
+  const requests: Parameters<DeepSeekBuildScriptChat>[0][] = [];
+  const chat: DeepSeekBuildScriptChat = async (request) => {
+    requests.push(request);
+    return large;
+  };
+  const result = await generateWithDeepSeekBuildScript("fill a large scene", "test-key", { chat, unlimitedBlocks: true });
+  assert.equal(result.structure.blocks.length, 114_688);
+  assert.match(requests[0].messages[0].content, /2,097,152 occupied blocks/);
+  assert.doesNotMatch(requests[0].messages[0].content, /stay comfortably below 100,000 blocks/);
 });
 
 test("schema and material failures are sent through the same bounded repair path", async () => {
@@ -140,6 +158,20 @@ test("the literal palette placeholder is removed after the bounded repair", asyn
   assert.equal(result.repaired, true);
   assert.match(repairRequest, /Never output the literal placeholder/);
   assert.equal("alias" in result.script.palette, false);
+});
+
+test("an invented palette block is replaced after the bounded repair", async () => {
+  const invalid = validScript("invented-roof-block");
+  invalid.palette.roof = "minecraft:roof";
+  let calls = 0;
+  const chat: DeepSeekBuildScriptChat = async () => {
+    calls += 1;
+    return invalid;
+  };
+  const result = await generateWithDeepSeekBuildScript("a cottage with a roof", "test-key", { chat });
+  assert.equal(calls, 2);
+  assert.equal(result.repaired, true);
+  assert.equal(result.script.palette.roof, "minecraft:stone_bricks");
 });
 
 test("entrance offset diagnostics tell the repair pass to recenter the opening", async () => {
@@ -229,7 +261,7 @@ test("a blocked model-authored entrance is advisory instead of rejecting the sce
 
 test("a second invalid candidate fails without a third provider call", async () => {
   const invalid = validScript("still-invalid");
-  invalid.palette.wall = "mod:diamond_block";
+  (invalid as unknown as { version: number }).version = 2;
   let calls = 0;
   const chat: DeepSeekBuildScriptChat = async () => {
     calls += 1;
@@ -237,7 +269,7 @@ test("a second invalid candidate fails without a third provider call", async () 
   };
   await assert.rejects(
     () => generateWithDeepSeekBuildScript("a cottage", "test-key", { chat }),
-    (error: unknown) => error instanceof DeepSeekBuildScriptError && error.attempts === 2 && error.diagnostics.some((diagnostic) => diagnostic.includes("palette.wall"))
+    (error: unknown) => error instanceof DeepSeekBuildScriptError && error.attempts === 2 && error.diagnostics.some((diagnostic) => diagnostic.includes("version must be 1"))
   );
   assert.equal(calls, 2);
 });
