@@ -57,15 +57,15 @@ function ProjectBadge({ title, isGenerated }: { title: string; isGenerated: bool
 
 function EmptyHint({ title, description }: { title: string; description: string }) {
   const { colors, resolved } = useTheme();
-  const strokeA = resolved === "dark" ? "rgba(255,255,255,0.12)" : "rgba(35,52,58,0.14)";
-  const fillA = resolved === "dark" ? "rgba(255,255,255,0.02)" : "rgba(35,52,58,0.03)";
-  const strokeB = resolved === "dark" ? "rgba(255,255,255,0.08)" : "rgba(35,52,58,0.08)";
-  const strokeC = resolved === "dark" ? "rgba(255,255,255,0.06)" : "rgba(35,52,58,0.06)";
+  const strokeA = resolved === "dark" ? "rgba(255,255,255,0.22)" : "var(--border-strong)";
+  const fillA = resolved === "dark" ? "rgba(255,255,255,0.035)" : "rgba(255,255,255,0.18)";
+  const strokeB = resolved === "dark" ? "rgba(255,255,255,0.16)" : "color-mix(in srgb, var(--border-strong) 82%, transparent)";
+  const strokeC = resolved === "dark" ? "rgba(255,255,255,0.13)" : "color-mix(in srgb, var(--border-strong) 68%, transparent)";
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="flex flex-col items-center gap-4 text-center">
-        <motion.div animate={{ opacity: [0.6, 1, 0.6] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
-          <svg width="64" height="56" viewBox="0 0 64 56" fill="none" aria-hidden>
+        <motion.div className="relative z-20" animate={{ opacity: [0.82, 1, 0.82] }} transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}>
+          <svg width="76" height="68" viewBox="0 0 64 56" fill="none" aria-hidden>
             <path d="M32 2L62 18V38L32 54L2 38V18L32 2Z" stroke={strokeA} strokeWidth="1.5" fill={fillA} />
             <path d="M32 2L62 18L32 34L2 18Z" fill={fillA} stroke={strokeB} strokeWidth="1" />
             <path d="M32 34V54M32 34L2 18M32 34L62 18" stroke={strokeC} strokeWidth="1" />
