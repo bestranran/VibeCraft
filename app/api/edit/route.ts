@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { applyBuildingOperations } from "@/lib/building-operations";
 import { LocalBuildingPlanner } from "@/lib/building-planner";
 import { createAiVoxelEditPlanner } from "@/lib/deepseek-voxel-edit-planner";
-import { MAX_STRUCTURE_BLOCKS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "@/lib/structure";
+import { MAX_SCENE_BLOCKS, SCENE_MAX_COORDINATE, SCENE_SIZE, isBlockId } from "@/lib/structure";
 import type { Box3D, GenerationMetadata, SemanticRegion, VoxelBlock, VoxelStructure } from "@/lib/structure";
 import { createVoxelEditContext, assertVoxelEditScope } from "@/lib/voxel-edit-context";
 import { executeVoxelTools } from "@/lib/voxel-tools";
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
 function parseStructure(value: unknown): VoxelStructure {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("A valid accepted structure is required.");
   const raw = value as Record<string, unknown>;
-  if (typeof raw.name !== "string" || !Array.isArray(raw.blocks) || !raw.blocks.length || raw.blocks.length > MAX_STRUCTURE_BLOCKS) {
+  if (typeof raw.name !== "string" || !Array.isArray(raw.blocks) || !raw.blocks.length || raw.blocks.length > MAX_SCENE_BLOCKS) {
     throw new Error("A valid non-empty accepted structure is required.");
   }
   const seen = new Set<string>();

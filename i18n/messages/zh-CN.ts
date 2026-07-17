@@ -93,6 +93,8 @@ export const zhCN = {
   "canvas.blocks.other": "场景中有 {count} 个方块",
   "canvas.deepSeekSettings": "DeepSeek 设置",
   "canvas.aiSettings": "AI 提供商设置",
+  "canvas.unlimitedBlocksOff": "解除 100,000 方块上限（仍受 128³ 场景边界限制）",
+  "canvas.unlimitedBlocksOn": "已解除 100,000 方块上限；点击恢复限制",
   "canvas.undo": "撤销",
   "canvas.redo": "重做",
   "canvas.exportSchematic": "导出 WorldEdit 原理图",
