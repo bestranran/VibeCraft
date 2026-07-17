@@ -57,18 +57,16 @@ function ProjectBadge({ title, isGenerated }: { title: string; isGenerated: bool
 
 function EmptyHint({ title, description }: { title: string; description: string }) {
   const { colors, resolved } = useTheme();
-  const cubeColor = resolved === "dark" ? "rgba(255,255,255,0.28)" : "#b8cbcd";
+  const cubeColor = resolved === "dark" ? "rgba(255,255,255,0.42)" : "#9fb6b9";
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="flex flex-col items-center gap-4 text-center">
-        <motion.div
+        <div
           className="relative z-20 flex h-[68px] w-[76px] items-center justify-center"
-          animate={{ opacity: [0.88, 1, 0.88] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           style={{ color: cubeColor }}
         >
-          <Cuboid width={76} height={68} strokeWidth={1.15} aria-hidden />
-        </motion.div>
+          <Cuboid width={76} height={68} strokeWidth={1.5} aria-hidden />
+        </div>
         <div className="flex flex-col gap-1.5">
           <p style={{ color: colors.textMuted, fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, letterSpacing: "0.02em", transition: "color 0.15s" }}>{title}</p>
           <p style={{ color: colors.textMuted, fontFamily: "'Inter', system-ui, sans-serif", fontSize: 11, opacity: 0.6, transition: "color 0.15s" }}>{description}</p>
