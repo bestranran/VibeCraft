@@ -8,6 +8,7 @@ import { loadMinecraftModelPack, type MinecraftModelPack } from "@/lib/minecraft
 import { getBlockColor, SCENE_SIZE } from "@/lib/structure";
 import { coordinateKey } from "@/lib/patches";
 import type { BlockId, PendingEdit, VoxelBlock, VoxelStructure } from "@/lib/structure";
+import { useTheme } from "@/components/redesign/ThemeProvider";
 
 type VoxelCanvasProps = {
   structure: VoxelStructure;
@@ -15,20 +16,22 @@ type VoxelCanvasProps = {
 };
 
 export function VoxelCanvas({ structure, pendingEdit }: VoxelCanvasProps) {
+  const { resolved } = useTheme();
+  const themeColors = useMemo(() => readCanvasTheme(resolved), [resolved]);
   return (
     <Canvas
       shadows
       camera={{ position: [12, 11, 14], fov: 45 }}
-      className="h-full min-h-[52vh] w-full lg:min-h-screen"
+      className="h-full min-h-full w-full"
     >
-      <color attach="background" args={["#1d1d1a"]} />
+      <color attach="background" args={[themeColors.background]} />
       <ambientLight intensity={0.65} />
       <directionalLight position={[10, 14, 8]} intensity={1.15} castShadow shadow-mapSize={[2048, 2048]} />
       <directionalLight position={[-8, 8, -6]} intensity={0.35} />
       <Bounds fit clip observe margin={1.25} maxDuration={0.8}>
         <VoxelScene structure={structure} pendingEdit={pendingEdit} />
       </Bounds>
-      <GridFloor />
+      <GridFloor colors={themeColors} />
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} minDistance={5} maxDistance={SCENE_SIZE * 2.5} />
     </Canvas>
   );
@@ -180,16 +183,32 @@ function isEmissiveBlock(id: BlockId) {
   return /(?:lantern|glowstone|shroomlight|froglight|magma|lava|redstone_lamp|sea_pickle)/.test(id);
 }
 
-function GridFloor() {
+function GridFloor({ colors }: { colors: CanvasTheme }) {
   return (
     <group>
-      <gridHelper args={[SCENE_SIZE + 16, SCENE_SIZE + 16, "#6f7f4f", "#36352f"]} position={[0, -0.02, 0]} />
+      <gridHelper args={[SCENE_SIZE + 16, SCENE_SIZE + 16, colors.gridMajor, colors.gridMinor]} position={[0, -0.02, 0]} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.04, 0]} receiveShadow>
         <planeGeometry args={[SCENE_SIZE + 16, SCENE_SIZE + 16]} />
-        <meshStandardMaterial color="#202018" roughness={1} />
+        <meshStandardMaterial color={colors.floor} roughness={1} />
       </mesh>
     </group>
   );
+}
+
+type CanvasTheme = { background: string; gridMajor: string; gridMinor: string; floor: string };
+
+function readCanvasTheme(_resolvedTheme: "light" | "dark"): CanvasTheme {
+  if (typeof document === "undefined") {
+    return { background: "#1e1c2c", gridMajor: "#4a4752", gridMinor: "#35323c", floor: "#211f29" };
+  }
+  const styles = getComputedStyle(document.documentElement);
+  const value = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
+  return {
+    background: value("--canvas-background", "#1e1c2c"),
+    gridMajor: value("--canvas-grid-major", "#4a4752"),
+    gridMinor: value("--canvas-grid-minor", "#35323c"),
+    floor: value("--canvas-floor", "#211f29"),
+  };
 }
 
 type RenderGroup = {

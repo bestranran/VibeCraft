@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import { isLocale, locales, type Locale } from "@/i18n/config";
 import { translate } from "@/i18n/resources";
+import { ThemeProvider } from "@/components/redesign/ThemeProvider";
+import { themeBootstrapScript } from "@/lib/theme";
 import "../globals.css";
 
 export function generateStaticParams() {
@@ -32,8 +34,13 @@ export function generateMetadata({ params }: { params: { locale: string } }): Me
 export default function LocalizedLayout({ children, params }: { children: React.ReactNode; params: { locale: string } }) {
   if (!isLocale(params.locale)) notFound();
   return (
-    <html lang={params.locale}>
-      <body><LocaleProvider locale={params.locale as Locale}>{children}</LocaleProvider></body>
+    <html lang={params.locale} suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} /></head>
+      <body>
+        <ThemeProvider>
+          <LocaleProvider locale={params.locale as Locale}>{children}</LocaleProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
