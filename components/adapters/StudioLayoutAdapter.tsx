@@ -141,12 +141,12 @@ export function StudioLayoutAdapter({
       onToggleCollapse={() => setLeftCollapsed((current) => !current)}
       text={isChinese ? {
         collapse: "收起面板", expand: "展开面板", title: "创作工作室", describeBadge: "描述", describeHint: "用自然语言描述您的建筑",
-        promptPlaceholder: "一座雄伟的多层塔楼，深色石材外墙，\n琥珀色窗户映照暖光，顶部有精致冠饰…", inspiration: "灵感参考",
+        promptPlaceholder: "(｡•̀ᴗ-)✧", inspiration: "灵感参考",
         planDistrict: "规划 128×128 城区", planningDistrict: "正在规划城区…", generate: "生成建筑", regenerate: "重新生成", generating: "正在生成…",
         refine: "精炼", refinePlaceholder: "继续描述您希望调整的细节…", recentRefinements: "最近调整", preview: "预览修改", previewing: "正在规划…", accept: "接受", reject: "拒绝",
       } : {
         collapse: "Collapse panel", expand: "Expand panel", title: "Creation Studio", describeBadge: "Describe", describeHint: "Describe your build in natural language",
-        promptPlaceholder: "A majestic multi-level tower with dark stone walls,\nwarm amber windows, and an ornate crown…", inspiration: "Inspiration",
+        promptPlaceholder: "(｡•̀ᴗ-)✧", inspiration: "Inspiration",
         planDistrict: "Plan 128×128 district", planningDistrict: "Planning district…", generate: "Generate building", regenerate: "Regenerate", generating: "Generating…",
         refine: "Refine", refinePlaceholder: "Describe the details you want to adjust…", recentRefinements: "Recent refinements", preview: "Preview edit", previewing: "Planning…", accept: "Accept", reject: "Reject",
       }}

@@ -8,7 +8,6 @@ import { exportMcFunction, toMcFunctionFilename, toSchematicFilename } from "@/l
 import { EXAMPLE_PROMPTS } from "@/lib/structure";
 import type { BuildingOperation, GenerationMetadata, StructurePatch, VoxelStructure, VoxelToolCall, WorldPlan, WorldPlanMetadata } from "@/lib/structure";
 import type { BuildingDocument } from "@/lib/structure";
-import { generateStructure, placeStructureInScene } from "@/lib/generator";
 import { acceptPendingEdit, createBuildingDocument, redoDocument, rejectPendingEdit, setPendingEdit, setWorldPlan, undoDocument } from "@/lib/building-document";
 import { clearSavedProject, loadProject, saveProject } from "@/lib/project-persistence";
 import { useI18n } from "@/i18n/LocaleProvider";
@@ -16,10 +15,22 @@ import type { AiApiMode, AiProvider } from "@/lib/ai-provider";
 
 type PersistenceNotice = { kind: "info" | "error"; message: string; requiresReset?: boolean };
 
+function createEmptyBuildingDocument() {
+  return createBuildingDocument({ name: "empty-scene", size: [0, 0, 0], blocks: [] });
+}
+
+function isLegacyStarterDocument(document: BuildingDocument) {
+  return document.structure.name === "desert-sandstone-tower"
+    && !document.generationMetadata
+    && !document.worldPlan
+    && document.history.length === 0
+    && document.future.length === 0;
+}
+
 export function StudioShell() {
   const { locale, t, plural, number, identifier, error: localizeError } = useI18n();
-  const [prompt, setPrompt] = useState(() => t("example.cyberpunk"));
-  const [document, setDocument] = useState<BuildingDocument>(() => createBuildingDocument(placeStructureInScene(generateStructure(EXAMPLE_PROMPTS[0]))));
+  const [prompt, setPrompt] = useState("");
+  const [document, setDocument] = useState<BuildingDocument>(createEmptyBuildingDocument);
   const [editPrompt, setEditPrompt] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -86,6 +97,12 @@ export function StudioShell() {
   useEffect(() => {
     const result = loadProject(window.localStorage);
     if (result.status === "restored") {
+      if (isLegacyStarterDocument(result.document)) {
+        setDocument(createEmptyBuildingDocument());
+        setPrompt("");
+        setPersistenceReady(true);
+        return;
+      }
       setDocument(result.document);
       if (result.document.generationMetadata?.prompt) {
         const restoredPrompt = result.document.generationMetadata.prompt;
@@ -214,7 +231,8 @@ export function StudioShell() {
       setPersistenceReady(false);
       setPersistenceNotice({ kind: "error", message: localizeError(error instanceof Error ? error.message : undefined, "errors.clearFailed"), requiresReset: true });
     }
-    setDocument(createBuildingDocument({ name: "empty-scene", size: [0, 0, 0], blocks: [] }));
+    setDocument(createEmptyBuildingDocument());
+    setPrompt("");
     setEditPrompt("");
     setEditError(null);
   }
