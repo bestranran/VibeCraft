@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Blocks, Check, Cuboid, X } from "lucide-react";
+import { Blocks, Box, Check, Cuboid, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTheme } from "./ThemeProvider";
 
@@ -62,10 +62,10 @@ function EmptyHint({ title, description }: { title: string; description: string 
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
       <div className="flex flex-col items-center gap-4 text-center">
         <div
-          className="relative z-20 flex h-[68px] w-[76px] items-center justify-center"
+          className="relative z-20 flex h-[68px] w-[68px] items-center justify-center"
           style={{ color: cubeColor }}
         >
-          <Cuboid width={76} height={68} strokeWidth={1.5} aria-hidden />
+          <Box width={68} height={68} strokeWidth={1.2} aria-hidden />
         </div>
         <div className="flex flex-col gap-1.5">
           <p style={{ color: colors.textMuted, fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13, letterSpacing: "0.02em", transition: "color 0.15s" }}>{title}</p>
