@@ -101,11 +101,17 @@ export function StudioLayoutAdapter({
   })), [document.history, time]);
 
   const isChinese = locale === "zh-CN";
-  const inspirations: StudioInspiration[] = [
-    { label: t("example.cyberpunk"), icon: "🏙", prompt: t("example.cyberpunk") },
-    { label: t("example.medieval"), icon: "🏰", prompt: t("example.medieval") },
-    { label: t("example.japanese"), icon: "🏯", prompt: t("example.japanese") },
-  ];
+  const inspirations: StudioInspiration[] = isChinese
+    ? [
+        { label: "现代玻璃摩天大楼", icon: "🏙", prompt: "现代玻璃摩天大楼" },
+        { label: "古典中式四合院", icon: "🏯", prompt: "古典中式四合院" },
+        { label: "海盗船坞要塞", icon: "⚓", prompt: "海盗船坞要塞" },
+      ]
+    : [
+        { label: "Modern glass skyscraper", icon: "🏙", prompt: "Modern glass skyscraper" },
+        { label: "Classical Chinese courtyard", icon: "🏯", prompt: "Classical Chinese courtyard" },
+        { label: "Pirate dock fortress", icon: "⚓", prompt: "Pirate dock fortress" },
+      ];
   const recentRefinements = document.history.slice(-3).reverse().map((edit) => edit.prompt);
 
   const leftPanel = (
