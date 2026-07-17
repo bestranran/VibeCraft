@@ -212,13 +212,13 @@ function EmptyCanvasFloor() {
           <clipPath id="studio-empty-floor-clip">
             <polygon points="400,382 820,550 400,718 -20,550" />
           </clipPath>
-          <radialGradient id="studio-empty-floor-shadow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(400 600) scale(238 94)">
-            <stop stopColor="var(--canvas-grid-major)" stopOpacity="0.34" />
-            <stop offset="0.72" stopColor="var(--canvas-grid-minor)" stopOpacity="0.12" />
+          <radialGradient id="studio-empty-floor-shadow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(400 602) scale(270 112)">
+            <stop stopColor="var(--canvas-empty-shadow)" />
+            <stop offset="0.7" stopColor="var(--canvas-empty-shadow)" stopOpacity="0.42" />
             <stop offset="1" stopColor="var(--canvas-background)" stopOpacity="0" />
           </radialGradient>
         </defs>
-        <ellipse cx="400" cy="600" rx="238" ry="94" fill="url(#studio-empty-floor-shadow)" />
+        <ellipse cx="400" cy="602" rx="270" ry="112" fill="url(#studio-empty-floor-shadow)" />
         <g clipPath="url(#studio-empty-floor-clip)" stroke="var(--canvas-grid-minor)" strokeWidth="1" opacity="0.62">
           {EMPTY_GRID_OFFSETS.map((offset) => (
             <line key={`r-${offset}`} x1={offset} y1="250" x2={offset + 1200} y2="730" />

@@ -27,6 +27,7 @@
   --canvas-grid-major: rgba(255, 255, 255, 0.08);
   --canvas-grid-minor: rgba(255, 255, 255, 0.035);
   --canvas-floor: #1e1c2c;
+  --canvas-empty-shadow: rgba(4, 3, 10, 0.34);
   --toolbar-background: rgba(24, 21, 31, 0.86);
   --overlay-background: rgba(18, 16, 23, 0.68);
   --surface-translucent: rgba(30, 27, 40, 0.88);
@@ -63,6 +64,7 @@
   --canvas-grid-major: #CFDEDF;
   --canvas-grid-minor: #DDE8E8;
   --canvas-floor: #E9F1F1;
+  --canvas-empty-shadow: rgba(111, 145, 148, 0.18);
   --toolbar-background: rgba(250, 252, 252, 0.9);
   --overlay-background: rgba(35, 52, 58, 0.34);
   --surface-translucent: rgba(250, 252, 252, 0.9);
